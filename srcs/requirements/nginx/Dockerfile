@@ -58,7 +58,7 @@ RUN openssl x509 -req -days 365 \
     -out ${SSL_DIR}/tvaroux_server.crt
 
 # 6. 設定ファイルのコピー
-COPY conf/zzz_nginx.conf /etc/nginx/nginx.conf
+COPY conf/zzz-nginx.conf /etc/nginx/nginx.conf
 
 # 7. ポートの公開　
 # ドキュメント用。実際の公開は compose の ports 側
