@@ -1,0 +1,15 @@
+[mysqld]
+
+# TCP接続の待ち受けアドレス（全インターフェース）
+# 他のコンテナからの接続を受け入れるため、全インターフェースで待ち受けるように設定
+# 根拠: https://mariadb.com/kb/en/server-system-variables/#bind_address
+bind-address = 0.0.0.0
+
+# TCP接続の待ち受けポート
+# デフォルトの MySQL/MariaDB ポートを使用
+# 根拠: https://mariadb.com/kb/en/server-system-variables/#port
+port = 3306
+
+# entrypoint.sh で有効にした skip-networking を上書き無効化
+# 根拠: https://mariadb.com/kb/en/server-system-variables/#skip_networking
+skip-networking = 0
