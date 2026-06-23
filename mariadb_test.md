@@ -1,0 +1,144 @@
+
+docker stop $(docker ps -qa); docker rm $(docker ps -qa); docker rmi -f $(docker images -qa); docker volume rm $(docker volume ls -q); docker network rm $(docker network ls -q) 2>/dev/null
+
+
+
+
+
+docker build で mariadb-test:task15 という設計図（イメージ）を作る
+
+1. イメージをビルドする
+```sh
+sudo docker build -t mariadb-test:banana .
+```
+カレントディレクトリ（末尾の .）の Dockerfile を基に、`mariadb-test:banana` という名前でイメージを作成します。
+
+2. 再度コンテナを実行する
+```sh
+
+sudo docker run -d --name mariadb-test-run \
+  --env MARIADB_DATABASE=wordpress \
+  --env MARIADB_USER=wpuser \
+  --env MARIADB_PASSWORD=wppassword \
+  mariadb-test:banana 
+```
+
+```sh
+$ docker ps
+CONTAINER ID   IMAGE                 COMMAND            CREATED          STATUS          PORTS      NAMES
+69fafb640b52   mariadb-test:banana   "/entrypoint.sh"   27 seconds ago   Up 26 seconds   3306/tcp   mariadb-test-run
+```
+
+Dockerにおける build, create, start は、コンテナが起動するまでの異なる段階（フェーズ）を担当するコマンドです。
+もっとも大きな違いは、操作の対象が「イメージ」なのか「コンテナ」なのか、そして「コンテナを動かすかどうか」にあります。
+------------------------------
+## 一目でわかる違い
+
+| コマンド [1] | 操作の対象 | 何をするか | コンテナは動く？ |
+|---|---|---|---|
+| docker build | イメージを作る | Dockerfile から設計図（イメージ）を組み立てる | 動かない |
+| docker create | コンテナを作る | 設計図から、停止状態のコンテナ（実体）を生成する | 動かない |
+| docker start | コンテナを動かす | 停止している既存のコンテナを起動する | 動く |
+
+------------------------------
+## 各コマンドの詳しい役割## 1. docker build （設計図の作成）
+
+* 役割: Dockerfile という指示書を読み込み、コンテナの基となる「イメージ（設計図・テンプレート）」を生成します。
+* 例え: 家の設計図や、プレジデントのプラモデルを組み立てる前の「型」を作る段階です。まだコンテナ自体は存在しません。
+* 実行例: docker build -t my-image . [2] 
+
+## 2. docker create （箱の準備）
+
+* 役割: 作成したイメージ（設計図）を基に、記憶領域や設定を確保して「コンテナ（実体）」を作ります。ただし、まだ起動はしません（ステータスは Created になります）。
+* 例え: 設計図通りに家を建てたけれど、まだ誰も住んでおらず、電気も通っていない状態です。
+* メリット: 事前にネットワークやボリュームの接続など、細かい設定を済ませておきたい場合に使われます。
+* 実行例: docker create --name my-container my-image
+
+## 3. docker start （電源をONにする）
+
+* 役割: docker create で作ったコンテナ、または一度動いてから停止（Stopped）しているコンテナを起動します。
+* 例え: 建ててあった家に電気を通し、住民が入居して活動を開始する（プロセスが動き出す）状態です。
+* 実行例: docker start my-container
+
+------------------------------
+## よく使う docker run との関係は？
+普段よく使う docker run は、内部で create と start を同時に連続で実行しているコマンドです。さらに、ローカルにイメージがなければ自動でダウンロード（pull）も行います。
+$$\text{docker run} = (\text{イメージの確認/pull}) + \text{docker create} + \text{docker start}$$ 
+これまでに実行しようとしていた流れを整理すると、以下のようになります。
+
+   1. docker build で mariadb-test:task15 という設計図（イメージ）を作る。
+   2. docker run を実行すると、内部でその設計図からコンテナを作成（create）し、そのまま起動（start）する。
+
+コンテナの準備状況について、次にどのステップ（Dockerfile のビルドや既存コンテナの再起動など）に進みたいか決まっていれば、コマンドをご案内しますので教えてください！
+
+[1] [https://qiita.com](https://qiita.com/tegnike/items/bcdcee0320e11a928d46)
+
+[2] [https://qiita.com](https://qiita.com/tegnike/items/bcdcee0320e11a928d46)
+
+はい、その通りです。docker create 直後の停止状態（Created）のコンテナには、ホストOS上のプロセス（PID）は存在しません。
+具体的には、以下のような状態になります。
+## 1. PID（プロセス）について
+
+* 存在しません。
+* Linuxのコンテナ技術において、PIDはコンテナ内のメインプロセス（CMDやENTRYPOINTで指定されたプログラム）が実行されて初めてホストOS上に生成されます。
+* 起動していないため、プロセスは1つも動いていません。
+
+## 2. メモリ（RAM）について
+
+* 実行用メモリは消費されません。
+* プロセスが動いていないため、アプリを実行するためのRAM（メモリ空間）は確保されず、CPUも消費しません。
+
+## 3. では、何が「確保」されているのか？
+docker create の段階で確保されるのは、主に以下のディスク容量（ストレージ）と設定情報です。
+
+* コンテナ専用の読み書きレイヤー（ストレージ）
+* イメージ（読み取り専用）の上に、そのコンテナ固有のデータを書き込むための「薄いディスクの層」が作成されます。
+* メタデータ（設定ファイル）
+* コンテナ名、環境変数（--env）、ネットワーク設定、マウントするボリュームなどの「起動構成」がJSONファイルとしてホストのDocker管理領域に保存されます。
+
+## まとめ
+
+* メモリ・CPU・PID：すべて「ゼロ（存在しない）」
+* ディスク・設定：起動に向けて「確保・準備されている」
+
+そのため、docker create を何十個実行しても、実際に docker start しない限りホストマシンのメモリ（RAM）が圧迫されることはありません。
+次に、この作成されたコンテナの設定内容を確認する方法（docker inspect）や、実際に起動してPIDを確認する方法など、気にある手順があれば教えてください！
+
+
+
+
+
+
+```sh
+docker run -d --name mariadb-test-run \
+  --env MARIADB_DATABASE=wordpress \
+  --env MARIADB_USER=wpuser \
+  --env MARIADB_PASSWORD=wppassword \
+  mariadb-test:banana
+```
+
+docker run -d --name mariadb-test-run   --env MARIADB_DATABASE=wordpress   --env MARIADB_USER=wpuser   --env MARIADB_PASSWORD=wppassword   mariadb-test:banana 
+
+失敗
+docker exec mariadb-test-run mariadb -u wpuser -pwppassword wordpress -e "SHOW DATABASES;"
+
+
+tvaroux@inception-server:~/gitclone/tom_inception_0622/srcs/requirements/mariadb$ docker exec mariadb-test-run mariadb -u wpuser -pwppassword wordpress -e "SHOW DATABASES;"
+ERROR 1045 (28000): Access denied for user 'wpuser'@'localhost' (using password: YES)
+
+
+docker ps -a
+
+docker stop mariadb-test-run 
+
+docker rm mariadb-test-run
+
+成功
+docker exec mariadb-test-run mariadb -u root -e "SELECT user, host FROM mysql.user;"
+
+User	Host
+PUBLIC	
+wpuser	%
+mariadb.sys	localhost
+mysql	localhost
+root	localhost
