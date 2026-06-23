@@ -29,6 +29,9 @@ RUN curl -O https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli
 && chmod +x wp-cli.phar \
 && mv wp-cli.phar /usr/local/bin/wp
 
+# wp-cli の shebang は /usr/bin/env php を探すため、Alpine の php83 に別名を用意する。
+RUN ln -s /usr/bin/php83 /usr/bin/php
+
 # 3.　作業（WordPressファイルを置くところ）の作成と指定
 RUN mkdir -p /var/www/html && chown -R nobody:nobody /var/www/html
 WORKDIR /var/www/html
