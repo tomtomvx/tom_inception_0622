@@ -24,7 +24,6 @@ RUN mkdir -p ${MYSQL_RUN_DIR} ${MYSQL_DATA_DIR} && \
 # The datadir located at /var/lib/mysql must be owned by the mysql user and group.
 
 # 3. 設定ファイルのコピー
-# コピー元を確認したい場合は、cat /vagrant/srcs/requirements/mariadb/conf/zzz-mariadb.cnf
 COPY conf/zzz-mariadb.cnf /etc/my.cnf.d/zzz-mariadb.cnf
 
 # 4. エントリポイントスクリプトのコピー
@@ -32,6 +31,8 @@ COPY tools/entrypoint.sh /
 RUN chmod +x /entrypoint.sh
 
 # MariaDB のデフォルトポート
+# ドキュメント用。実際の公開は compose の ports 側
+# MariaDBのデフォルトのポートである3306番ポートを公開します。
 EXPOSE 3306
 
 # コンテナ起動時の実行コマンド
