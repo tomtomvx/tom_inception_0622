@@ -8,6 +8,15 @@ echo -n "wp_admin_password_here" > secrets/wp_admin_password.txt
 echo -n "wp_editor_password_here" > secrets/wp_editor_password.txt
 ```
 
+# 既存データディレクトリを削除（クリーンインストール時のみ実行）
+# ※ 既存データを残したい場合はスキップ
+sudo rm -rf /home/tvaroux/data/mariadb
+sudo rm -rf /home/tvaroux/data/wordpress
+
+# データディレクトリ作成
+mkdir -p /home/tvaroux/data/mariadb
+mkdir -p /home/tvaroux/data/wordpress
+```
 
 
 

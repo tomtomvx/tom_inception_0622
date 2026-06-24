@@ -1,6 +1,4 @@
-# version: '3'
-
-servicies:
+services:
   mariadb:
     container_name: mariadb
     image: mariadb

@@ -50,7 +50,7 @@ fi
 # 必要に応じて手動で更新する必要があります。
 if [ ! -f wp-config.php ]; then
 	wp config create \
-		--dbhost="${MARIADB_HOST}" \
+		--dbhost="mariadb:${MARIADB_PORT:-3306}" \
 		--dbname="${MARIADB_DATABASE}" \
 		--dbuser="${MARIADB_USER}" \
 		--dbpass="${MARIADB_PASSWORD}"
