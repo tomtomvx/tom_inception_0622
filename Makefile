@@ -5,27 +5,32 @@
 
 
 
-stop: docker stop $(docker ps -qa)
+stop:
+	docker stop $(docker ps -qa)
 
-rm: docker rm $(docker ps -qa)
+rm:
+	docker rm $(docker ps -qa)
 
-rmimg: docker rmi -f $(docker images -qa)
+rmimg:
+	docker rmi -f $(docker images -qa)
 
-rmvol: docker volume rm $(docker volume ls -q)
+rmvol:
+	docker volume rm $(docker volume ls -q)
 
-rmnet: docker network rm $(docker network ls -q) 2>/dev/null
+rmnet:
+	docker network rm $(docker network ls -q)
 
 
 
 DC = docker compose -f ./srcs/docker-compose.yml
 
 
-all: up
-
 # detach: 起動後のターミナルを占有しない
 # build: ビルド済みのイメージがあれば再ビルドしない
 up:
     $(DC) up --detach --build
+
+all: up
 
 build:
 	$(DC) build
