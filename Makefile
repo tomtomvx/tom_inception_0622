@@ -3,25 +3,6 @@
 #; docker rmi -f $(docker images -qa); docker volume rm $(docker volume ls -q)
 #; docker network rm $(docker network ls -q) 2>/dev/null
 
-
-
-stop:
-	-docker stop $$(docker ps -qa)
-
-rm:
-	-docker rm $$(docker ps -qa)
-
-rmimg:
-	-docker rmi -f $$(docker images -qa)
-
-rmvol:
-	-docker volume rm $$(docker volume ls -q)
-
-rmnet:
-	-docker network rm $$(docker network ls -q)
-
-
-
 DC = docker compose -f ./srcs/docker-compose.yml
 
 
@@ -53,15 +34,56 @@ down-v:
 curl-https:
 	curl --insecure --verbose https://127.0.0.1/index.html
 
-re:
+re: down up
 
-re-start: down up
+browser:
+	@echo "Try open browser..."
+	export DISPLAY=:0 && \
+	firefox https://127.0.0.1 || \
+	echo "No GUI browser launcher. Use: make curl-https"
 
 inspect:
+	@test -n "$(CONTAINER)" || (echo "usage: make inspect CONTAINER=<name>" && exit 1)
+	@docker inspect $(CONTAINER) --format 'name={{.Name}} pid={{.State.Pid}} status={{.State.Status}} rallestart={{.RestartCount}}'
 
+inspect-mariadb:
+	@$(MAKE) --no-print-directory inspect CONTAINER=mariadb
 
+inspect-wordpress:
+	@$(MAKE) --no-print-directory inspect CONTAINER=wordpress
 
+inspect-nginx:
+	@$(MAKE) --no-print-directory inspect CONTAINER=nginx
 
-.PHONY: all up build up-no-build down down-v
+inspect-test:
+	@$(MAKE) --no-print-directory inspect CONTAINER=test
+
+fclean: down-v
+	sudo rm -rf /home/torinoue/data/mariadb /home/torinoue/data/wordpress
+	mkdir -p /home/torinoue/data/mariadb /home/torinoue/data/wordpress
+
+# fclean のあと、イメージをキャッシュ無しで作り直してバックグラウンド起動（評価前のゼロ再現用）
+rebuild: fclean
+	$(BUILDKIT_ENV) $(DC) build --no-cache
+	$(DC) up -d
+
+stop:
+	-docker stop $$(docker ps -qa)
+
+rm:
+	-docker rm $$(docker ps -qa)
+
+rmimg:
+	-docker rmi -f $$(docker images -qa)
+
+rmvol:
+	-docker volume rm $$(docker volume ls -q)
+
+rmnet:
+	-docker network rm $$(docker network ls -q) 2>/dev/null
+
+# .PHONY: all up build up-no-build down down-v
 
 # .PHONY: all build up up-no-build down down-v re browser curl-https inspect inspect-mariadb inspect-wordpress inspect-nginx inspect-test fclean rebuild
+
+.PHONY: all build up up-no-build down down-v re browser curl-https inspect inspect-mariadb inspect-wordpress inspect-nginx inspect-test fclean rebuild stop rm rmimg rmvol rmnet
