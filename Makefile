@@ -28,7 +28,7 @@ DC = docker compose -f ./srcs/docker-compose.yml
 # detach: 起動後のターミナルを占有しない
 # build: ビルド済みのイメージがあれば再ビルドしない
 up:
-    $(DC) up --detach --build
+	$(DC) up --detach --build
 
 all: up
 
@@ -53,7 +53,7 @@ down-v:
 curl-https:
 	curl --insecure --verbose https://127.0.0.1/index.html
 
-re: 
+re:
 
 re-start: down up
 
