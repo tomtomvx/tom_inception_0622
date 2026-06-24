@@ -1,3 +1,16 @@
+
+
+```bash
+# 各パスワードを設定（改行なし）
+echo -n "db_password_here" > secrets/db_password.txt
+echo -n "db_root_password_here" > secrets/db_root_password.txt
+echo -n "wp_admin_password_here" > secrets/wp_admin_password.txt
+echo -n "wp_editor_password_here" > secrets/wp_editor_password.txt
+```
+
+
+
+
 docker build で mariadb-test:task15 という設計図（イメージ）を作る
 
 1. イメージをビルドする

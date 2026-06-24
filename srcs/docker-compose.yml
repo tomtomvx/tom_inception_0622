@@ -1,0 +1,93 @@
+# version: '3'
+
+servicies:
+  mariadb:
+    container_name: mariadb
+    image: mariadb
+    pull_policy: never
+    build:
+      context: ./requirements/mariadb
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes: 
+      - mariadb_data:/var/lib/mysql
+    restart: always
+    secrets:
+      - db_root_password
+      - db_password
+    networks:
+      - network_cake
+  wordpress:
+    depends_on:
+      - mariadb
+    container_name: wordpress
+    image: wordpress
+    pull_policy: never
+    build:
+      context: ./requirements/wordpress
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - wordpress_data:/var/www/html
+    restart: always
+    secrets:
+      - db_password
+      - wp_admin_password
+      - wp_editor_password
+    networks:
+      - network_cake
+
+  nginx:
+    depends_on:
+      - wordpress
+    container_name: nginx
+    image: nginx
+    pull_policy: never
+    build:
+      context: ./requirements/nginx
+      dockerfile: Dockerfile
+    ports:
+      - "443:443"
+    volumes:
+      - wordpress_data:/var/www/html
+    restart: always
+    networks:
+      - network_cake
+
+volumes:
+  mariadb_data:
+    driver: local # ホストOS（Linuxカーネル）のmount機能を直接利用する設定
+    driver_opts:
+      # 1. 【実体の特定】ホストOS上の、Docker管理外にある物理ディレクトリをソースに指定
+      device: /home/tvaroux/data/mariadb
+
+      # 2. 【接続方法の指定】ホストのmount(8)にある「--bind」オプションを使用し、
+      #    既存のディレクトリ構造をそのままコンテナにマッピング（再配置）する
+      o: bind
+
+      # 3. 【型定義のスキップ】
+      #    device（ホスト側のパス）は既に特定のファイルシステム（ext4等）として存在している。
+      #    ここで別の型（tmpfsなど）を強制指定すると、マウント時のドライバ不適合によりエラーとなる。
+      #    そのため、既存のファイルシステムの性質をそのまま引き継ぐ「none」を指定する。
+      type: none
+
+  wordpress_data:
+    driver: local
+    driver_opts:
+      device: /home/tvaroux/data/wordpress
+      o: bind
+      type: none
+
+networks:
+  network_cake:
+    driver: bridge
+
+secrets:
+  db_password:
+    file: ../secrets/db_password.txt
+  db_root_password:
+    file: ../secrets/db_root_password.txt
+  wp_admin_password:
+    file: ../secrets/wp_admin_password.txt
+  wp_editor_password:
+    file: ../secrets/wp_editor_password.txt

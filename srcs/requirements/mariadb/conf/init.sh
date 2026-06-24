@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 mkdir -p /var/run/mysqld
 chown mysql:mysql /var/run/mysqld
