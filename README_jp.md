@@ -1,115 +1,321 @@
+*このプロジェクトは、42カリキュラムの一環として tvaroux によって作成されました。*
 
+## 概要
+
+Inception は、Docker を使って小さなコンテナ化された Web インフラを構築し、その仕組みを理解することに重点を置いた 42 のプロジェクトです。
+
+このプロジェクトの目的は、複数の独立した Docker コンテナを使って、完全な WordPress サイトを動かすことです。各サービスはそれぞれ専用の Dockerfile からビルドされ、Docker Compose によってまとめて管理されます。
+
+このインフラには以下が含まれます。
+
+- HTTPS の入口となる NGINX
+- PHP-FPM で動作する WordPress
+- データベースサーバーとしての MariaDB
+- 永続データ用の Docker ボリューム
+- 機密パスワード用の Docker secrets
+- 内部サービス通信専用の Docker ブリッジネットワーク
+
+リクエストの流れは以下の通りです。
+
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        VM (Ubuntu 22.04)                    │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │                   Docker Compose                      │  │
+│  │  ┌─────────┐    ┌─────────────┐    ┌─────────────┐    │  │
+│  │  │  NGINX  │◀───│  WordPress  │◀───│   MariaDB   │    │  │
+│  │  │ :443    │    │  php-fpm    │    │   :3306     │    │  │
+│  │  │ TLS 1.2+│    │  wp-cli     │    │             │    │  │
+│  │  └────┬────┘    └──────┬──────┘    └──────┬──────┘    │  │
+│  │       │                │                  │           │  │
+│  │       └────────────────┴──────────────────┘           │  │
+│  │                 tvaroux_network (bridge)              │  │
+│  │                                                       │  │
+│  │       [volumes: wordpress, mariadb]                   │  │
+│  └──────────────── │  ───────────────────────────────────┘  │
+│                    │                                        │
+│                  Mount                                      │
+│                    │                                        │
+│          [Docker volumes]                                   │
+│  /var/lib/docker/volumes/srcs_wordpress_data/_data          │
+│  /var/lib/docker/volumes/srcs_mariadb_data/_data            │
+│                    │                                        │
+│                Bind (o: bind)                               │
+│                    │                                        │
+│          [device volumes]                                   │
+│            /home/tvaroux/data/wordpress                     │
+│            /home/tvaroux/data/mariadb                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+
+```text
+Browser
+  |
+  | HTTPS :443
+  v
+NGINX
+  |
+  | FastCGI :9000
+  v
+WordPress / PHP-FPM
+  |
+  | SQL :3306
+  v
+MariaDB
+```
+
+Docker を使うことで、各サービスをそれぞれ独立したコンテナ内に隔離しつつ、スタック全体を再現可能な形で管理できます。ソースファイルは `srcs/requirements/` 配下にサービスごとに整理されており、各コンポーネントには Dockerfile と関連する設定ファイルがあります。
+
+主なソース構成:
+
+```text
+srcs/
+  docker-compose.yml
+  requirements/
+    mariadb/
+      Dockerfile
+      conf/
+      tools/
+    nginx/
+      Dockerfile
+      conf/
+    wordpress/
+      Dockerfile
+      conf/
+      tools/
+  vm/
+secrets/
+Makefile
+```
+
+## 手順
+
+### 前提条件
+
+プロジェクトを実行する前に、Docker Engine と Docker Compose がインストールされていることを確認してください。
+
+ホスト上に必要なデータディレクトリを作成します。
 
 ```bash
-# 各パスワードを設定（改行なし）
+mkdir -p /home/tvaroux/data/mariadb
+mkdir -p /home/tvaroux/data/wordpress
+```
+
+`srcs/.env` を作成し、機密情報ではない設定値を記述します。例:
+
+```env
+YOUR_LEARNER_USERNAME=tvaroux
+DOMAIN_NAME=tvaroux.42.fr
+MARIADB_DATABASE=wordpress
+MARIADB_USER=wpuser
+WP_ADMIN_USER=admin
+WP_ADMIN_EMAIL=admin@example.com
+WP_EDITOR_USER=editor
+WP_EDITOR_EMAIL=editor@example.com
+```
+
+`secrets/` 配下に secret ファイルを作成します。
+
+```bash
 echo -n "db_password_here" > secrets/db_password.txt
 echo -n "db_root_password_here" > secrets/db_root_password.txt
 echo -n "wp_admin_password_here" > secrets/wp_admin_password.txt
 echo -n "wp_editor_password_here" > secrets/wp_editor_password.txt
 ```
 
-# 既存データディレクトリを削除（クリーンインストール時のみ実行）
-# ※ 既存データを残したい場合はスキップ
-sudo rm -rf /home/tvaroux/data/mariadb
-sudo rm -rf /home/tvaroux/data/wordpress
+これらのファイルはリポジトリにコミットしてはいけません。
 
-# データディレクトリ作成
-mkdir -p /home/tvaroux/data/mariadb
-mkdir -p /home/tvaroux/data/wordpress
+### ビルドと実行
+
+リポジトリのルートからスタックを起動します。
+
+```bash
+make up
 ```
 
+このコマンドは Compose 設定を検証し、サービスイメージをビルドして、コンテナをデタッチモードで起動します。
 
+### アクセス
 
-docker build で mariadb-test:task15 という設計図（イメージ）を作る
+コンテナが起動したら、サイトには HTTPS 経由でアクセスできます。
 
-1. イメージをビルドする
-```sh
-sudo docker build -t mariadb-test:banana .
-```
-カレントディレクトリ（末尾の .）の Dockerfile を基に、`mariadb-test:banana` という名前でイメージを作成します。
-
-2. 再度コンテナを実行する
-```sh
-
-sudo docker run -d --name mariadb-test-run \
-  --env MARIADB_DATABASE=wordpress \
-  --env MARIADB_USER=wpuser \
-  --env MARIADB_PASSWORD=wppassword \
-  mariadb-test:banana 
+```text
+https://tvaroux.42.fr
 ```
 
-Dockerにおける build, create, start は、コンテナが起動するまでの異なる段階（フェーズ）を担当するコマンドです。
-もっとも大きな違いは、操作の対象が「イメージ」なのか「コンテナ」なのか、そして「コンテナを動かすかどうか」にあります。
-------------------------------
-## 一目でわかる違い
+ローカル VM やポートフォワード環境では、以下でもテストできます。
 
-| コマンド [1] | 操作の対象 | 何をするか | コンテナは動く？ |
-|---|---|---|---|
-| docker build | イメージを作る | Dockerfile から設計図（イメージ）を組み立てる | 動かない |
-| docker create | コンテナを作る | 設計図から、停止状態のコンテナ（実体）を生成する | 動かない |
-| docker start | コンテナを動かす | 停止している既存のコンテナを起動する | 動く |
+```text
+https://127.0.0.1
+```
 
-------------------------------
-## 各コマンドの詳しい役割## 1. docker build （設計図の作成）
+WordPress の管理画面は以下からアクセスできます。
 
-* 役割: Dockerfile という指示書を読み込み、コンテナの基となる「イメージ（設計図・テンプレート）」を生成します。
-* 例え: 家の設計図や、プレジデントのプラモデルを組み立てる前の「型」を作る段階です。まだコンテナ自体は存在しません。
-* 実行例: docker build -t my-image . [2] 
+```text
+https://tvaroux.42.fr/wp-admin
+```
 
-## 2. docker create （箱の準備）
+### 便利なコマンド
 
-* 役割: 作成したイメージ（設計図）を基に、記憶領域や設定を確保して「コンテナ（実体）」を作ります。ただし、まだ起動はしません（ステータスは Created になります）。
-* 例え: 設計図通りに家を建てたけれど、まだ誰も住んでおらず、電気も通っていない状態です。
-* メリット: 事前にネットワークやボリュームの接続など、細かい設定を済ませておきたい場合に使われます。
-* 実行例: docker create --name my-container my-image
+```bash
+make build
+```
 
-## 3. docker start （電源をONにする）
+Docker イメージを再ビルドします。
 
-* 役割: docker create で作ったコンテナ、または一度動いてから停止（Stopped）しているコンテナを起動します。
-* 例え: 建ててあった家に電気を通し、住民が入居して活動を開始する（プロセスが動き出す）状態です。
-* 実行例: docker start my-container
+```bash
+make up-no-build
+```
 
-------------------------------
-## よく使う docker run との関係は？
-普段よく使う docker run は、内部で create と start を同時に連続で実行しているコマンドです。さらに、ローカルにイメージがなければ自動でダウンロード（pull）も行います。
-$$\text{docker run} = (\text{イメージの確認/pull}) + \text{docker create} + \text{docker start}$$ 
-これまでに実行しようとしていた流れを整理すると、以下のようになります。
+既存のイメージを、再ビルドせずに起動します。
 
-   1. docker build で mariadb-test:task15 という設計図（イメージ）を作る。
-   2. docker run を実行すると、内部でその設計図からコンテナを作成（create）し、そのまま起動（start）する。
+```bash
+make down
+```
 
-コンテナの準備状況について、次にどのステップ（Dockerfile のビルドや既存コンテナの再起動など）に進みたいか決まっていれば、コマンドをご案内しますので教えてください！
+コンテナを停止して削除します。
 
-[1] [https://qiita.com](https://qiita.com/tegnike/items/bcdcee0320e11a928d46)
+```bash
+make down-v
+```
 
-[2] [https://qiita.com](https://qiita.com/tegnike/items/bcdcee0320e11a928d46)
+スタックを停止し、Docker ボリュームも削除します。
 
-はい、その通りです。docker create 直後の停止状態（Created）のコンテナには、ホストOS上のプロセス（PID）は存在しません。
-具体的には、以下のような状態になります。
-## 1. PID（プロセス）について
+```bash
+make re
+```
 
-* 存在しません。
-* Linuxのコンテナ技術において、PIDはコンテナ内のメインプロセス（CMDやENTRYPOINTで指定されたプログラム）が実行されて初めてホストOS上に生成されます。
-* 起動していないため、プロセスは1つも動いていません。
+スタックを再起動します。
 
-## 2. メモリ（RAM）について
+```bash
+make curl-https
+```
 
-* 実行用メモリは消費されません。
-* プロセスが動いていないため、アプリを実行するためのRAM（メモリ空間）は確保されず、CPUも消費しません。
+`curl` を使って HTTPS エンドポイントをテストします。
 
-## 3. では、何が「確保」されているのか？
-docker create の段階で確保されるのは、主に以下のディスク容量（ストレージ）と設定情報です。
+```bash
+make inspect-nginx
+make inspect-wordpress
+make inspect-mariadb
+```
 
-* コンテナ専用の読み書きレイヤー（ストレージ）
-* イメージ（読み取り専用）の上に、そのコンテナ固有のデータを書き込むための「薄いディスクの層」が作成されます。
-* メタデータ（設定ファイル）
-* コンテナ名、環境変数（--env）、ネットワーク設定、マウントするボリュームなどの「起動構成」がJSONファイルとしてホストのDocker管理領域に保存されます。
+各コンテナの実行状態を確認します。
 
-## まとめ
+## プロジェクト説明
 
-* メモリ・CPU・PID：すべて「ゼロ（存在しない）」
-* ディスク・設定：起動に向けて「確保・準備されている」
+### 主な設計方針
 
-そのため、docker create を何十個実行しても、実際に docker start しない限りホストマシンのメモリ（RAM）が圧迫されることはありません。
-次に、この作成されたコンテナの設定内容を確認する方法（docker inspect）や、実際に起動してPIDを確認する方法など、気にある手順があれば教えてください！
+このプロジェクトでは、すべてのサービスを 1 台のマシンに直接インストールするのではなく、インフラを 3 つのコンテナに分離しています。
 
+- NGINX だけがホストの `443` ポートに公開されます。
+- WordPress は内部 Docker ネットワークを通じて MariaDB と通信します。
+- MariaDB のデータと WordPress のファイルは永続ボリュームに保存されます。
+- パスワードは通常の環境変数ではなく Docker secrets によって渡されます。
+- 各サービスは、スタック内部の仕組みを理解するために、カスタム Dockerfile からビルドされます。
+
+### 仮想マシンと Docker
+
+| 項目 | 仮想マシン | Docker コンテナ |
+|---|---|---|
+| 仮想化のレベル | ハードウェアを仮想化する | プロセスを仮想化する |
+| オペレーティングシステム | 完全なゲスト OS を実行する | ホストのカーネルを共有する |
+| 起動時間 | 通常は遅い | 通常は速い |
+| リソース使用量 | 重い | 軽い |
+| 分離 | 強い OS レベルの分離 | namespace と cgroups によるプロセス分離 |
+
+仮想マシンは、完全に分離された OS が必要な場合に有用です。Docker はより軽量で、個別のサービスをパッケージ化して実行するのに適しています。
+
+このプロジェクトでは、42 の課題要件により、仮想化環境内でプロジェクトを実行する必要があるため、VM の中で Docker を実行しています。
+
+### Secrets と環境変数
+
+| 項目 | Docker secrets | 環境変数 |
+|---|---|---|
+| 適した用途 | パスワードや機密データ | 機密ではない設定 |
+| 露出方法 | `/run/secrets/` 配下にファイルとしてマウントされる | プロセス環境内で見える |
+| リスク | 認証情報に対して低め | 認証情報に対して高め |
+| 例 | データベースパスワード | ドメイン名、データベース名、ユーザー名 |
+
+このプロジェクトでは、以下のパスワードに Docker secrets を使用しています。
+
+- `db_password`
+- `db_root_password`
+- `wp_admin_password`
+- `wp_editor_password`
+
+環境変数は、ドメイン名、データベース名、ユーザー名など、機密ではない設定にのみ使用しています。
+
+### Docker ネットワークとホストネットワーク
+
+| 項目 | Docker ブリッジネットワーク | ホストネットワーク |
+|---|---|---|
+| 分離 | コンテナはプライベートネットワークを使う | コンテナがホストネットワークを直接使う |
+| サービス検出 | コンテナ同士が名前で解決できる | Docker DNS による分離がない |
+| ポート公開 | 選択したポートだけを公開する | サービスがホストポートに直接バインドする可能性がある |
+| セキュリティ | より制御しやすい | 分離が弱い |
+
+このプロジェクトでは、専用の Docker ブリッジネットワークを使用しています。コンテナ同士は `wordpress` や `mariadb` のようなサービス名で通信します。
+
+ホストに `443` ポートを公開しているのは NGINX コンテナだけです。MariaDB と WordPress は Docker ネットワークの外部には直接公開されません。
+
+### Docker ボリュームと Bind Mount
+
+| 項目 | Docker ボリューム | Bind mount |
+|---|---|---|
+| 管理元 | Docker | ホストファイルシステム |
+| 移植性 | より移植しやすい | ホスト上のパスに依存する |
+| 可視性 | Docker コマンドで管理する | ホスト上で直接見える |
+| 用途 | 永続的なアプリケーションデータ | ホストファイルへの直接アクセス |
+
+このプロジェクトでは、bind 形式のドライバーオプションを使った Docker ボリュームを使用しています。これにより、データは以下の場所に永続化されます。
+
+```text
+/home/tvaroux/data/mariadb
+/home/tvaroux/data/wordpress
+```
+
+MariaDB ボリュームにはデータベースファイルが保存され、WordPress ボリュームには WordPress サイトのファイルが保存されます。これにより、コンテナを再ビルドまたは再起動してもデータを保持できます。
+
+## 参考資料
+
+### 公式ドキュメント
+
+- Docker documentation: https://docs.docker.com/
+- Docker Compose file reference: https://docs.docker.com/reference/compose-file/
+- Docker Compose secrets: https://docs.docker.com/compose/how-tos/use-secrets/
+- Docker volumes: https://docs.docker.com/engine/storage/volumes/
+- Docker networking: https://docs.docker.com/compose/how-tos/networking/
+- NGINX documentation: https://nginx.org/en/docs/
+- NGINX SSL module: https://nginx.org/en/docs/http/ngx_http_ssl_module.html
+- NGINX FastCGI module: https://nginx.org/en/docs/http/ngx_http_fastcgi_module.html
+- MariaDB documentation: https://mariadb.com/kb/en/documentation/
+- MariaDB install database tool: https://mariadb.com/docs/server/clients-and-utilities/deployment-tools/mariadb-install-db
+- WordPress documentation: https://wordpress.org/documentation/
+- WP-CLI handbook: https://make.wordpress.org/cli/handbook/
+- PHP-FPM documentation: https://www.php.net/manual/en/install.fpm.php
+- GNU Make manual: https://www.gnu.org/software/make/manual/make.html
+- VirtualBox manual: https://www.virtualbox.org/manual/UserManual.html
+
+### 追加参考資料
+
+- RFC 8446, TLS 1.3: https://datatracker.ietf.org/doc/html/rfc8446
+- OpenSSL documentation: https://www.openssl.org/docs/
+- Alpine Linux documentation: https://docs.alpinelinux.org/
+- Alpine Linux package database: https://pkgs.alpinelinux.org/
+
+### AI の使用について
+
+このプロジェクトでは、学習および開発の補助として AI を使用しました。
+
+AI は以下の目的で使用しました。
+
+- イメージ、コンテナ、ボリューム、ネットワーク、secrets などの Docker の概念説明
+- 仮想マシンと Docker コンテナの比較
+- Docker Compose の設計方針のレビュー
+- shell の entrypoint スクリプト構成の補助
+- 検証コマンドの提案
+- ドキュメントおよび README 内容の整理
+
+AI は、プロジェクト理解の代替として使用したものではありません。最終的な設計判断、テスト、デバッグ、検証は学生本人が行いました。
