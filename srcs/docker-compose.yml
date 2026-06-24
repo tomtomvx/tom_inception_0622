@@ -1,7 +1,7 @@
 services:
   mariadb:
     container_name: mariadb
-    image: mariadb
+    image: mariadb:banana
     pull_policy: never
     build:
       context: ./requirements/mariadb
@@ -19,7 +19,7 @@ services:
     depends_on:
       - mariadb
     container_name: wordpress
-    image: wordpress
+    image: wordpress:peach
     pull_policy: never
     build:
       context: ./requirements/wordpress
@@ -39,7 +39,7 @@ services:
     depends_on:
       - wordpress
     container_name: nginx
-    image: nginx
+    image: nginx:apple
     pull_policy: never
     build:
       context: ./requirements/nginx
