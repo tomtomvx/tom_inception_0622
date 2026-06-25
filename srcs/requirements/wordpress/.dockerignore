@@ -1,0 +1,10 @@
+*
+!Dockerfile
+!.dockerignore
+
+!conf/
+!conf/www.conf
+!conf/docker-php-memlimit.ini
+
+!tools/
+!tools/entrypoint.sh

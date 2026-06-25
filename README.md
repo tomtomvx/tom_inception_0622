@@ -4,17 +4,20 @@
 
 ## Description
 
-Inception is a 42 system administration project. Its goal is to build a small, reproducible web infrastructure with Docker, Docker Compose, and custom service images.
+Inception is a 42 system administration project. Its goal is to build a small
+web infrastructure with Docker and Docker Compose, using custom images and clear
+service separation.
 
-This project runs a WordPress website through three independent containers:
+This project runs a WordPress website with three containers:
 
 - `nginx`: the only public entry point, exposed on HTTPS port `443`
 - `wordpress`: WordPress served by PHP-FPM on the internal port `9000`
 - `mariadb`: the database server used by WordPress on the internal port `3306`
 
-The stack is managed by `srcs/docker-compose.yml`. Each service is built from its own Dockerfile under `srcs/requirements/<service>/`, and each service owns its own configuration and startup logic.
+The stack is declared in `srcs/docker-compose.yml`. Each service has its own
+Dockerfile, configuration, and startup script under
+`srcs/requirements/<service>/`.
 
-Request flow:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -28,24 +31,26 @@ Request flow:
 │  │  └────┬────┘    └──────┬──────┘    └──────┬──────┘    │  │
 │  │       │                │                  │           │  │
 │  │       └────────────────┴──────────────────┘           │  │
-│  │                 tvaroux_network (bridge)              │  │
+│  │                 tvaroux_network (bridge)             │  │
 │  │                                                       │  │
 │  │       [volumes: wordpress, mariadb]                   │  │
 │  └──────────────── │  ───────────────────────────────────┘  │
-│                    │                                        │
-│                  Mount                                      │
+│                    │                                        │ 
+│                  Mount                                      │ 
 │                    │                                        │
 │          [Docker volumes]                                   │
 │  /var/lib/docker/volumes/srcs_wordpress_data/_data          │
 │  /var/lib/docker/volumes/srcs_mariadb_data/_data            │
-│                    │                                        │
-│                Bind (o: bind)                               │
+│                    │                                        │ 
+│                Bind (o: bind)                               │ 
 │                    │                                        │
 │          [device volumes]                                   │
-│            /home/tvaroux/data/wordpress                     │
-│            /home/tvaroux/data/mariadb                       │
+│            /home/tvaroux/data/wordpress                    │
+│            /home/tvaroux/data/mariadb                      │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+Request flow:
 
 ```text
 Browser
@@ -70,12 +75,9 @@ Main source layout:
 |-- Makefile
 |-- README.md
 |-- secrets/
-|   |-- db_password.txt
-|   |-- db_root_password.txt
-|   |-- wp_admin_password.txt
-|   `-- wp_editor_password.txt
+|   `-- .gitignore
 `-- srcs/
-    |-- .env
+    |-- .env_sample
     |-- docker-compose.yml
     `-- requirements/
         |-- mariadb/
@@ -92,11 +94,13 @@ Main source layout:
             `-- tools/entrypoint.sh
 ```
 
-Docker is used here to isolate services, make the stack reproducible, and keep the runtime close to the subject requirements. Docker Compose connects the services with a dedicated bridge network, mounts persistent data volumes, injects non-secret configuration through `.env`, and injects passwords through Docker secrets.
+Docker is used to isolate services, keep the runtime reproducible, and make the
+infrastructure easy to rebuild from source. Docker Compose connects the services
+with a dedicated bridge network, mounts persistent data volumes, injects
+non-secret configuration through `.env`, and injects passwords through Docker
+secrets.
 
 ## Instructions
-
-### Prerequisites
 
 Run commands from the project root:
 
@@ -104,27 +108,54 @@ Run commands from the project root:
 cd tom_inception_0622
 ```
 
-Docker Engine and Docker Compose must be installed. The host data directories must also exist before the stack starts:
+Docker Engine and Docker Compose must be installed.
+
+### 1. Prepare host data directories
+
+The Compose volumes bind to host directories, so create them before starting the
+stack:
 
 ```sh
 mkdir -p /home/tvaroux/data/mariadb
 mkdir -p /home/tvaroux/data/wordpress
 ```
 
-Create `srcs/.env` for non-secret configuration:
+These paths are used by `driver_opts.device` in `srcs/docker-compose.yml`.
+
+### 2. Create `.env`
+
+Create `srcs/.env` from the sample file:
+
+```sh
+cp srcs/.env_sample srcs/.env
+```
+
+Example values:
 
 ```env
 DOMAIN_NAME=tvaroux.42.fr
+
 MARIADB_DATABASE=wordpress
 MARIADB_USER=wpuser
 MARIADB_PORT=3306
-WP_ADMIN_USER=boss42
-WP_ADMIN_EMAIL=admin@example.com
+
+WP_ADMIN_USER=ado
+WP_ADMIN_EMAIL=ado@example.com
 WP_USER=wpeditor
 WP_USER_EMAIL=editor@example.com
 ```
 
-Create the Docker secret files under `secrets/`:
+The administrator username must not contain `admin` or `Admin`.
+
+If needed, add the domain to `/etc/hosts` on the VM or evaluation host:
+
+```text
+127.0.0.1 tvaroux.42.fr
+```
+
+### 3. Create Docker secret files
+
+Create the secret files expected by Compose:
 
 ```sh
 mkdir -p secrets
@@ -136,13 +167,7 @@ printf 'wordpress_editor_password\n' > secrets/wp_editor_password.txt
 
 These files contain credentials and must not be committed to Git.
 
-If needed, add the domain to `/etc/hosts` on the VM or host used for evaluation:
-
-```text
-127.0.0.1 tvaroux.42.fr
-```
-
-### Build and run
+### 4. Build and run
 
 Build the images and start the containers:
 
@@ -150,28 +175,28 @@ Build the images and start the containers:
 make up
 ```
 
-This uses:
+This runs:
 
 ```sh
 docker compose -f ./srcs/docker-compose.yml up --detach --build
 ```
 
-The site is then available at:
+The site is available at:
 
 ```text
 https://tvaroux.42.fr
 https://127.0.0.1
 ```
 
-The certificate is self-signed, so a browser warning is expected.
+The TLS certificate is self-signed, so a browser warning is expected.
 
-### Useful commands
+### Useful Make targets
 
 ```sh
 make build
 ```
 
-Build the images without starting containers.
+Build the service images without starting containers.
 
 ```sh
 make up-no-build
@@ -183,13 +208,13 @@ Start existing images without rebuilding.
 make down
 ```
 
-Stop and remove the containers.
+Stop and remove containers.
 
 ```sh
 make down-v
 ```
 
-Stop the containers and remove the Compose volumes.
+Stop containers and remove Compose volumes.
 
 ```sh
 make re
@@ -221,11 +246,12 @@ Important points:
 
 - Base image: `alpine:3.23`
 - Runtime packages: `nginx`, `openssl`
-- Self-signed TLS certificate and key are generated during image build
+- Image tag: `nginx:apple`
 - Configuration file: `srcs/requirements/nginx/conf/zzz-nginx.conf`
-- HTTPS server listens on `443 ssl`
-- TLS protocols are restricted to `TLSv1.2 TLSv1.3`
-- PHP files are forwarded to `wordpress:9000` through FastCGI
+- A self-signed certificate is generated during image build
+- HTTPS listens on `443 ssl`
+- TLS is restricted to `TLSv1.2 TLSv1.3`
+- PHP requests are forwarded to `wordpress:9000` through FastCGI
 - NGINX stays in the foreground with `nginx -g 'daemon off;'`
 
 Only NGINX publishes a host port:
@@ -244,7 +270,9 @@ The WordPress image is built from `srcs/requirements/wordpress/Dockerfile`.
 Important points:
 
 - Base image: `alpine:3.23`
-- Runtime packages include `php83`, `php83-fpm`, `php83-mysqli`, `php83-curl`, XML and mbstring modules
+- Runtime packages include `php83`, `php83-fpm`, `php83-mysqli`,
+  `php83-curl`, XML, DOM, and mbstring modules
+- Image tag: `wordpress:peach`
 - WP-CLI is installed as `/usr/local/bin/wp`
 - PHP-FPM listens on port `9000`
 - WordPress files are stored in `/var/www/html`
@@ -252,17 +280,15 @@ Important points:
 - Passwords are read from `/run/secrets/`
 - PHP-FPM stays in the foreground with `exec php-fpm83 -F`
 
-On first start, `tools/entrypoint.sh` does the following:
+On first start, `tools/entrypoint.sh`:
 
 1. Reads the database password from `/run/secrets/db_password`.
 2. Waits until `mariadb` answers on `${MARIADB_PORT:-3306}`.
 3. Downloads WordPress core if `/var/www/html/wp-settings.php` does not exist.
 4. Creates `wp-config.php` if it does not exist.
 5. Runs `wp core install` if WordPress is not installed.
-6. Creates one administrator and one editor user.
+6. Creates one administrator user and one editor user.
 7. Starts PHP-FPM as PID 1.
-
-The administrator username should not contain `admin` or `Admin`; this project uses a value such as `boss42`.
 
 ### MariaDB
 
@@ -272,13 +298,14 @@ Important points:
 
 - Base image: `alpine:3.23`
 - Runtime packages: `mariadb`, `mariadb-client`
+- Image tag: `mariadb:banana`
 - Configuration file: `srcs/requirements/mariadb/conf/zzz-mariadb.cnf`
 - MariaDB binds to `0.0.0.0` inside the Docker network
 - MariaDB listens on port `3306`
 - Database files are stored in `/var/lib/mysql`
-- The service is started with `exec mariadbd --user=mysql`
+- The service starts with `exec mariadbd --user=mysql`
 
-On first start, `tools/entrypoint.sh` does the following:
+On first start, `tools/entrypoint.sh`:
 
 1. Checks whether `/var/lib/mysql/mysql` exists.
 2. If not, initializes the data directory with `mariadb-install-db`.
@@ -292,7 +319,8 @@ On first start, `tools/entrypoint.sh` does the following:
 10. Shuts down the temporary server.
 11. Starts the real MariaDB server as PID 1.
 
-The init guard prevents data from being overwritten on container restart.
+The init guard prevents existing database data from being overwritten on
+container restart.
 
 ## Main Design Choices
 
@@ -306,32 +334,36 @@ The init guard prevents data from being overwritten on container restart.
 | Resource usage | Heavier | Lighter |
 | Best use | Full OS isolation | Packaging one service and its dependencies |
 
-The subject expects the project to run in a virtualized environment, so Docker may run inside a VM during evaluation. Inside that VM, Docker containers are a better fit than installing NGINX, PHP-FPM, and MariaDB directly on the machine because each service can be built, started, stopped, inspected, and rebuilt independently.
+The subject expects the project to run in a virtualized environment, so Docker
+may run inside a VM during evaluation. Inside that VM, Docker containers are a
+better fit than installing NGINX, PHP-FPM, and MariaDB directly on the machine:
+each service can be built, started, stopped, inspected, and rebuilt
+independently.
 
 ### Secrets vs Environment Variables
 
 | Point | Docker secrets | Environment variables |
 | --- | --- | --- |
 | Best use | Passwords and credentials | Non-sensitive configuration |
-| Exposure | Mounted as files in `/run/secrets/` | Visible in the process environment |
+| Exposure | Mounted as files in `/run/secrets/` | Visible in process environments and inspect output |
 | In this project | DB and WordPress passwords | Domain, database name, usernames |
 
-The Compose file declares Docker secrets for:
+The Compose file declares these Docker secrets:
 
 - `db_password`
 - `db_root_password`
 - `wp_admin_password`
 - `wp_editor_password`
 
-The runtime scripts read the needed secrets as files, for example:
+The runtime scripts read secrets as files, for example:
 
 ```sh
 cat /run/secrets/db_password
 ```
 
-During MariaDB first initialization, root access is performed locally through the temporary server setup; the WordPress-facing database user is created with `db_password`.
-
-Environment variables are still used for values that are useful configuration but not credentials, such as `DOMAIN_NAME`, `MARIADB_DATABASE`, `MARIADB_USER`, `WP_ADMIN_USER`, and `WP_USER`.
+Environment variables are used for useful non-secret configuration such as
+`DOMAIN_NAME`, `MARIADB_DATABASE`, `MARIADB_USER`, `WP_ADMIN_USER`, and
+`WP_USER`.
 
 ### Docker Network vs Host Network
 
@@ -342,13 +374,17 @@ Environment variables are still used for values that are useful configuration bu
 | Port exposure | Only selected ports are published | Services can bind directly to host ports |
 | In this project | `network_cake` | Not used |
 
-The stack uses a dedicated bridge network named `network_cake`. This allows:
+The stack uses a dedicated bridge network declared as `network_cake`. Compose
+usually creates it with a project prefix, so Docker may display it as
+`srcs_network_cake`.
+
+This allows:
 
 - NGINX to reach WordPress as `wordpress:9000`
 - WordPress to reach MariaDB as `mariadb:3306`
 - MariaDB to stay private and unexposed to the host
 
-This is safer and clearer than host networking because only `443` is published.
+Only port `443` is published.
 
 ### Docker Volumes vs Bind Mounts
 
@@ -357,9 +393,9 @@ This is safer and clearer than host networking because only `443` is published.
 | Managed by | Docker | Host filesystem path |
 | Portability | Less tied to a fixed host path | Depends directly on host paths |
 | Visibility | Managed through Docker commands | Visible directly on the host |
-| In this project | Compose volumes with local driver | `driver_opts` bind to `/home/tvaroux/data/...` |
+| In this project | Compose volumes with local driver | `driver_opts` binds to `/home/tvaroux/data/...` |
 
-This project defines Docker volumes but uses the local driver's bind options:
+This project defines Docker volumes and uses the local driver's bind options:
 
 ```yaml
 volumes:
@@ -385,6 +421,26 @@ The result is:
 
 ## Defense Notes
 
+### Clean evaluation start
+
+The evaluator may ask for a clean Docker state before building:
+
+```sh
+docker stop $(docker ps -qa)
+docker rm $(docker ps -qa)
+docker rmi -f $(docker images -qa)
+docker volume rm $(docker volume ls -q)
+docker network rm $(docker network ls -q) 2>/dev/null
+sudo rm -rf /home/tvaroux/data/*
+mkdir -p /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+```
+
+Then recreate `srcs/.env` and the `secrets/*.txt` files, and run:
+
+```sh
+make up
+```
+
 ### Quick health checks
 
 ```sh
@@ -392,14 +448,6 @@ docker compose -f srcs/docker-compose.yml ps
 docker network ls
 docker volume ls
 docker images | grep -E 'mariadb|wordpress|nginx'
-```
-
-Expected service image tags:
-
-```text
-mariadb:banana
-wordpress:peach
-nginx:apple
 ```
 
 Expected containers:
@@ -410,13 +458,19 @@ wordpress
 nginx
 ```
 
+Expected image tags:
+
+```text
+mariadb:banana
+wordpress:peach
+nginx:apple
+```
+
 Expected network:
 
 ```text
 srcs_network_cake
 ```
-
-Compose prefixes the declared network `network_cake` with the project name, so Docker usually shows it as `srcs_network_cake`.
 
 ### TLS checks
 
@@ -431,7 +485,7 @@ Explain:
 - HTTPS is terminated by NGINX.
 - The certificate is self-signed.
 - The NGINX config allows TLS 1.2 and TLS 1.3.
-- Port `80` is not published by Compose; only `443` is public.
+- Compose publishes only `443:443`.
 
 ### SQL checks
 
@@ -473,7 +527,8 @@ One-line table check from the host:
 docker exec -it mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SHOW TABLES;"'
 ```
 
-This proves that WordPress has initialized the database and that real site data is stored in MariaDB.
+This proves that WordPress has initialized the database and that real site data
+is stored in MariaDB.
 
 ### Persistence checks
 
@@ -483,11 +538,12 @@ This proves that WordPress has initialized the database and that real site data 
 4. Open the site again and check that the content still exists.
 5. Confirm the same content through SQL.
 
-Persistence works because the database and WordPress files are stored in host-backed volumes, not only inside disposable containers.
+Persistence works because the database and WordPress files are stored in
+host-backed volumes, not only inside disposable containers.
 
 ### Configuration change example
 
-If asked to change the public HTTPS port, change only the host side of the mapping:
+If asked to change the public HTTPS port, change the host side of the mapping:
 
 ```yaml
 ports:
@@ -502,7 +558,8 @@ make up-no-build
 curl -vk https://127.0.0.1:8443/
 ```
 
-If a file copied into an image changes, such as an NGINX config file or Dockerfile, rebuild the affected image before starting again:
+If a file copied into an image changes, such as an NGINX config file or
+Dockerfile, rebuild the affected image before starting again:
 
 ```sh
 make down
@@ -512,7 +569,9 @@ make up-no-build
 
 ### Forbidden patterns to explain
 
-The containers should stay alive because their real service runs in the foreground, not because of fake commands such as `tail -f`, `sleep infinity`, or an infinite loop.
+The containers stay alive because their real service runs in the foreground,
+not because of fake commands such as `tail -f`, `sleep infinity`, or an infinite
+loop.
 
 In this project:
 
@@ -520,7 +579,8 @@ In this project:
 - WordPress uses `exec php-fpm83 -F`
 - MariaDB uses `exec mariadbd --user=mysql`
 
-This matters because the service process becomes PID 1 and receives container lifecycle signals correctly.
+This matters because the service process becomes PID 1 and receives container
+lifecycle signals correctly.
 
 ## Resources
 
@@ -553,12 +613,15 @@ AI was used as a learning and documentation assistant during this project.
 
 It helped with:
 
-- Explaining Docker concepts such as images, containers, volumes, networks, and secrets
+- Explaining Docker concepts such as images, containers, volumes, networks, and
+  secrets
 - Comparing virtual machines and Docker containers
 - Reviewing Docker Compose design choices
-- Understanding NGINX, FastCGI, PHP-FPM, MariaDB initialization, and WP-CLI workflows
-- Drafting and organizing startup-script logic
-- Preparing verification commands for the defense
+- Understanding NGINX, FastCGI, PHP-FPM, MariaDB initialization, and WP-CLI
+  workflows
+- Preparing verification commands and SQL checks for the defense
 - Structuring this README and related study notes
 
-AI was not used as a substitute for understanding the project. The final design decisions, implementation, debugging, testing, and defense explanations were checked and owned by the student.
+AI was not used as a substitute for understanding the project. The final design
+decisions, implementation, debugging, testing, and defense explanations were
+checked and owned by the student.

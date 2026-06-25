@@ -1,18 +1,56 @@
-# DEV_DOC.md - Inception Developer Documentation
+# DEV_DOC - Developer Documentation
 
-This document explains how a developer can set up the Inception environment from scratch, build and launch it with the Makefile and Docker Compose, manage containers and volumes, and explain how persistent data works. It is also written as a review cheat sheet with commands and short oral explanation points.
+This document explains how to set up, build, run, inspect, and defend this
+Inception project from a developer point of view.
 
-## 1. Prerequisites
+## Project Layout
 
-Runtime environment:
+```text
+.
+|-- Makefile
+|-- README.md
+|-- README-jp.md
+|-- USER_DOC.md
+|-- DEV_DOC.md
+|-- secrets/
+|   `-- .gitignore
+`-- srcs/
+    |-- .env_sample
+    |-- docker-compose.yml
+    `-- requirements/
+        |-- mariadb/
+        |   |-- Dockerfile
+        |   |-- conf/zzz-mariadb.cnf
+        |   `-- tools/entrypoint.sh
+        |-- nginx/
+        |   |-- Dockerfile
+        |   `-- conf/zzz-nginx.conf
+        `-- wordpress/
+            |-- Dockerfile
+            |-- conf/www.conf
+            |-- conf/docker-php-memlimit.ini
+            `-- tools/entrypoint.sh
+```
 
-- Run inside a VM according to the 42 evaluation requirements
-- Docker Engine is available
-- Docker Compose v2 is available
-- `make`, `curl`, and `openssl` are available
-- The bind mount directories can be created under `/home/tvaroux/data/`
+Each service has its own Dockerfile, configuration, and startup logic. The full
+stack is declared in `srcs/docker-compose.yml`.
 
-Check:
+## Environment Setup From Scratch
+
+Run all project commands from:
+
+```sh
+cd tom_inception_0622
+```
+
+Required tools:
+
+- Docker Engine
+- Docker Compose plugin
+- GNU Make
+- `curl` and `openssl` for smoke tests
+
+Check versions:
 
 ```sh
 docker --version
@@ -20,58 +58,26 @@ docker compose version
 make --version
 ```
 
-Working directory:
+### 1. Prepare persistent host directories
 
-```sh
-cd /home/tvaroux/Desktop/inception/tom_inception_0622
-```
-
-Main layout:
-
-```text
-Makefile
-USER_DOC.md
-DEV_DOC.md
-srcs/
-  docker-compose.yml
-  .env
-  requirements/
-    mariadb/
-      Dockerfile
-      conf/zzz-mariadb.cnf
-      tools/entrypoint.sh
-    wordpress/
-      Dockerfile
-      conf/www.conf
-      tools/entrypoint.sh
-    nginx/
-      Dockerfile
-      conf/zzz-nginx.conf
-secrets/
-```
-
-## 2. Setting Up from Scratch
-
-### 2-1. Host Data Directories
-
-The Compose volumes are bind-mounted to real directories on the host, not only to Docker-managed storage.
+The Compose volumes use the local driver with bind options. These host
+directories must exist before startup:
 
 ```sh
 mkdir -p /home/tvaroux/data/mariadb
 mkdir -p /home/tvaroux/data/wordpress
 ```
 
-Meaning:
+MariaDB files are persisted in `/home/tvaroux/data/mariadb`.
+WordPress files are persisted in `/home/tvaroux/data/wordpress`.
 
-- `/home/tvaroux/data/mariadb` stores the actual MariaDB database files.
-- `/home/tvaroux/data/wordpress` stores WordPress PHP files, uploads, configuration files, and related data.
-- If these directories remain, the data remains even after containers are removed.
+### 2. Create `srcs/.env`
 
-### 2-2. `.env`
+```sh
+cp srcs/.env_sample srcs/.env
+```
 
-Write non-secret configuration in `srcs/.env`.
-
-Example:
+Sample values:
 
 ```env
 DOMAIN_NAME=tvaroux.42.fr
@@ -86,68 +92,69 @@ WP_USER=wpeditor
 WP_USER_EMAIL=editor@example.com
 ```
 
-Notes:
+Use `.env` for non-secret configuration. Do not put passwords in `.env`.
 
-- Do not use names such as `admin` or `administrator` for `WP_ADMIN_USER`, because such names are commonly forbidden by the subject.
-- This WordPress entrypoint reads `WP_USER` and `WP_USER_EMAIL` for the editor user.
-- Passwords are not stored in `.env`.
+Important defense point: the WordPress administrator username must not contain
+`admin` or `Admin`.
 
-### 2-3. Secrets
+### 3. Create Docker secrets
 
-Create password files under `secrets/`.
+The Compose file expects four host files:
 
 ```sh
 mkdir -p secrets
-printf 'db_password_here\n' > secrets/db_password.txt
-printf 'db_root_password_here\n' > secrets/db_root_password.txt
-printf 'wp_admin_password_here\n' > secrets/wp_admin_password.txt
-printf 'wp_editor_password_here\n' > secrets/wp_editor_password.txt
+printf '%s' 'database_user_password' > secrets/db_password.txt
+printf '%s' 'database_root_password' > secrets/db_root_password.txt
+printf '%s' 'wordpress_admin_password' > secrets/wp_admin_password.txt
+printf '%s' 'wordpress_editor_password' > secrets/wp_editor_password.txt
 ```
 
-Compose definition:
+Compose maps them to secret names:
 
-```yaml
-secrets:
-  db_password:
-    file: ../secrets/db_password.txt
-  db_root_password:
-    file: ../secrets/db_root_password.txt
-  wp_admin_password:
-    file: ../secrets/wp_admin_password.txt
-  wp_editor_password:
-    file: ../secrets/wp_editor_password.txt
-```
+| Compose secret | Host file | Runtime path |
+| --- | --- | --- |
+| `db_password` | `../secrets/db_password.txt` | `/run/secrets/db_password` |
+| `db_root_password` | `../secrets/db_root_password.txt` | `/run/secrets/db_root_password` |
+| `wp_admin_password` | `../secrets/wp_admin_password.txt` | `/run/secrets/wp_admin_password` |
+| `wp_editor_password` | `../secrets/wp_editor_password.txt` | `/run/secrets/wp_editor_password` |
 
-Inside containers:
+Passwords are read by entrypoint scripts as files. This avoids exposing secrets
+as normal environment variables.
+
+### 4. Optional domain setup
+
+If the domain is not already resolvable:
 
 ```text
-/run/secrets/db_password
-/run/secrets/db_root_password
-/run/secrets/wp_admin_password
-/run/secrets/wp_editor_password
+127.0.0.1 tvaroux.42.fr
 ```
 
-Review explanation:
+Add it to `/etc/hosts` on the VM or evaluation host.
 
-- `.env` is for configuration, secrets are for passwords.
-- Secrets are mounted as files, not exposed as process environment variables.
-- They are used to avoid committing passwords to Git.
+## Build and Launch
 
-## 3. Building and Launching
+Main Makefile targets:
 
-The Makefile uses:
+| Target | Purpose |
+| --- | --- |
+| `make` / `make all` / `make up` | Build images and start containers detached |
+| `make build` | Build images only |
+| `make up-no-build` | Start existing images without rebuilding |
+| `make down` | Stop and remove containers |
+| `make down-v` | Stop containers and remove Compose volumes |
+| `make re` | Run `make down` then `make up` |
+| `make curl-https` | Test HTTPS with `curl --insecure --verbose` |
+| `make inspect-nginx` | Inspect the NGINX container |
+| `make inspect-wordpress` | Inspect the WordPress container |
+| `make inspect-mariadb` | Inspect the MariaDB container |
 
-```make
-DC = docker compose -f ./srcs/docker-compose.yml
-```
-
-Start:
+First build:
 
 ```sh
 make up
 ```
 
-Equivalent command:
+Equivalent Compose command:
 
 ```sh
 docker compose -f ./srcs/docker-compose.yml up --detach --build
@@ -159,45 +166,44 @@ Build only:
 make build
 ```
 
-Start with existing images:
-
-```sh
-make up-no-build
-```
-
-Stop:
+Recreate containers:
 
 ```sh
 make down
+make up-no-build
 ```
 
-Remove containers and Docker volumes:
+Rebuild after Dockerfile or copied configuration changes:
+
+```sh
+make down
+make build
+make up-no-build
+```
+
+Note: the current `fclean` and `rebuild` targets in the Makefile remove
+`/home/tvaroux/data/...`. For this repository version, the Compose volumes use
+`/home/tvaroux/data/...`, so use the manual clean commands below unless the
+Makefile path is corrected.
+
+Clean start:
 
 ```sh
 make down-v
+sudo rm -rf /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+mkdir -p /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+make up
 ```
 
-Restart:
-
-```sh
-make re
-```
-
-Validate Compose configuration:
-
-```sh
-docker compose -f srcs/docker-compose.yml config
-```
-
-## 4. Docker Compose Structure
+## Docker Compose Design
 
 Services:
 
-| Service | image | build context | container_name | restart |
-|---|---|---|---|---|
-| `mariadb` | `mariadb:banana` | `./requirements/mariadb` | `mariadb` | `always` |
-| `wordpress` | `wordpress:peach` | `./requirements/wordpress` | `wordpress` | `always` |
-| `nginx` | `nginx:apple` | `./requirements/nginx` | `nginx` | `always` |
+| Service | Container | Image tag | Build context |
+| --- | --- | --- | --- |
+| `mariadb` | `mariadb` | `mariadb:banana` | `srcs/requirements/mariadb` |
+| `wordpress` | `wordpress` | `wordpress:peach` | `srcs/requirements/wordpress` |
+| `nginx` | `nginx` | `nginx:apple` | `srcs/requirements/nginx` |
 
 Network:
 
@@ -207,144 +213,129 @@ networks:
     driver: bridge
 ```
 
-Oral explanation:
+Docker may display the network with a Compose project prefix, for example
+`srcs_network_cake`.
 
-- `network_cake` is a dedicated bridge network.
-- Containers can resolve each other by service name.
-- NGINX forwards FastCGI requests to `wordpress:9000`.
-- WordPress connects to `mariadb:3306` with SQL.
-- The project does not use `network: host` or `links`.
-
-Exposed port:
+Only NGINX publishes a port:
 
 ```yaml
-nginx:
-  ports:
-    - "443:443"
+ports:
+  - "443:443"
 ```
 
-Oral explanation:
+WordPress and MariaDB are reachable only inside the Docker network:
 
-- The only host-visible entry point is HTTPS port `443`.
-- MariaDB and WordPress are not exposed externally.
+- NGINX -> `wordpress:9000`
+- WordPress -> `mariadb:3306`
 
-## 5. Implementation Points for Each Container
+## Service Startup Flow
 
-### 5-1. MariaDB
+### NGINX
 
-Dockerfile:
+Files:
 
-- Base image is `alpine:3.23`
-- Installs `mariadb` and `mariadb-client`
-- Uses `/var/lib/mysql` as the data directory
-- Copies `conf/zzz-mariadb.cnf`
-- Runs `tools/entrypoint.sh` as PID 1
+- `srcs/requirements/nginx/Dockerfile`
+- `srcs/requirements/nginx/conf/zzz-nginx.conf`
 
-Configuration:
+Key points:
 
-```ini
-bind-address = 0.0.0.0
-port = 3306
-skip-networking = 0
-```
+- Base image: `alpine:3.23`
+- Runtime packages: `nginx`, `openssl`
+- Self-signed certificate generated during image build
+- Certificate path: `/etc/nginx/ssl/tvaroux_server.crt`
+- Key path: `/etc/nginx/ssl/tvaroux_server.key`
+- Listens on `443 ssl`
+- Allows `TLSv1.2 TLSv1.3`
+- Forwards PHP requests to `wordpress:9000`
+- Runs in foreground with `nginx -g 'daemon off;'`
 
-Entrypoint flow:
+Defense explanation: NGINX is the only public entry point. It terminates TLS
+and passes PHP requests to PHP-FPM over FastCGI.
 
-1. If `/var/lib/mysql/mysql` does not exist, treat it as the first initialization.
-2. Run `mariadb-install-db` to create the system database.
-3. Temporarily start the server with `mariadbd --user=mysql --skip-networking &`.
-4. Wait for startup with `mariadb-admin ping`.
-5. Read `/run/secrets/db_password` and create the WordPress database and user.
-6. Stop the temporary server with `mariadb-admin shutdown`.
-7. Finally, run the production server with `exec mariadbd --user=mysql`.
+### WordPress / PHP-FPM
 
-Meaning of the initialization SQL:
+Files:
 
-```sql
-DELETE FROM mysql.user WHERE User='';
-DROP DATABASE IF EXISTS test;
-CREATE DATABASE IF NOT EXISTS wordpress;
-CREATE USER IF NOT EXISTS 'wpuser'@'%' IDENTIFIED BY '...';
-GRANT ALL PRIVILEGES ON wordpress.* TO 'wpuser'@'%';
-FLUSH PRIVILEGES;
-```
+- `srcs/requirements/wordpress/Dockerfile`
+- `srcs/requirements/wordpress/conf/www.conf`
+- `srcs/requirements/wordpress/tools/entrypoint.sh`
 
-Explanation points:
+Key points:
 
-- Initialization happens only on the first run, so existing data is not destroyed on restart.
-- `wpuser@'%'` is the user used for TCP connections from other containers.
-- The production process uses `exec`, becomes PID 1, and can receive container signals.
+- Base image: `alpine:3.23`
+- Runtime packages include `php83`, `php83-fpm`, `php83-mysqli`, `php83-curl`,
+  `php83-xml`, `php83-dom`, and `php83-mbstring`
+- WP-CLI is installed as `/usr/local/bin/wp`
+- Working directory: `/var/www/html`
+- PHP-FPM listens on `9000`
+- Runs in foreground with `exec php-fpm83 -F`
 
-### 5-2. WordPress
+Startup flow:
 
-Dockerfile:
+1. Read DB password from `/run/secrets/db_password`.
+2. Wait until MariaDB accepts authenticated ping on `mariadb:${MARIADB_PORT:-3306}`.
+3. Download WordPress core if `/var/www/html/wp-settings.php` does not exist.
+4. Create `wp-config.php` if it does not exist.
+5. Run `wp core install` if WordPress is not installed.
+6. Create the editor user.
+7. Start PHP-FPM as PID 1.
 
-- Base image is `alpine:3.23`
-- Installs `php83`, `php83-fpm`, `php83-mysqli`, and related packages
-- Installs `wp-cli.phar` as `/usr/local/bin/wp`
-- Copies the PHP-FPM configuration `www.conf`
-- Starts `tools/entrypoint.sh`
+Important: `wp-config.php` and existing WordPress users are not automatically
+updated if secrets change later. For a clean reset, clear persistent data and
+start again.
 
-PHP-FPM:
+### MariaDB
 
-```ini
-listen = 9000
-```
+Files:
 
-Entrypoint flow:
+- `srcs/requirements/mariadb/Dockerfile`
+- `srcs/requirements/mariadb/conf/zzz-mariadb.cnf`
+- `srcs/requirements/mariadb/tools/entrypoint.sh`
 
-1. Read `/run/secrets/db_password`.
-2. Wait for the database with `mariadb-admin ping --host=mariadb --port=3306`.
-3. If `/var/www/html/wp-settings.php` does not exist, run `wp core download`.
-4. If `wp-config.php` does not exist, create it with the database connection settings.
-5. If `wp core is-installed` is false, install WordPress.
-6. Create the administrator `WP_ADMIN_USER` and editor `WP_USER`.
-7. Start PHP-FPM in the foreground with `exec php-fpm83 -F`.
+Key points:
 
-Explanation points:
+- Base image: `alpine:3.23`
+- Runtime packages: `mariadb`, `mariadb-client`
+- Data directory: `/var/lib/mysql`
+- Binds to `0.0.0.0`
+- Listens on `3306`
+- Runs in foreground with `exec mariadbd --user=mysql`
 
-- The WordPress container does not contain NGINX.
-- The web server and PHP runtime are separated.
-- `wp-cli` is used for WordPress initialization and user creation.
-- `php-fpm83 -F` prevents daemonization and keeps PHP-FPM as the main container process.
+First-start flow:
 
-### 5-3. NGINX
+1. Check whether `/var/lib/mysql/mysql` exists.
+2. If missing, run `mariadb-install-db`.
+3. Start temporary MariaDB with `--skip-networking`.
+4. Wait for `mariadb-admin ping`.
+5. Read app DB password from `/run/secrets/db_password`.
+6. Remove anonymous users.
+7. Remove the default `test` database.
+8. Create `${MARIADB_DATABASE}`.
+9. Create `${MARIADB_USER}` for host `%`.
+10. Grant privileges on `${MARIADB_DATABASE}.*`.
+11. Stop the temporary server.
+12. Start the real MariaDB server as PID 1.
 
-Dockerfile:
+The initialization guard prevents existing database data from being overwritten
+on container restart.
 
-- Base image is `alpine:3.23`
-- Installs `nginx` and `openssl`
-- Creates a self-signed certificate under `/etc/nginx/ssl/`
-- Copies `conf/zzz-nginx.conf` to `/etc/nginx/nginx.conf`
-- Starts NGINX in the foreground with `nginx -g "daemon off;"`
-
-Configuration:
-
-```nginx
-listen 443 ssl;
-server_name tvaroux.42.fr;
-ssl_protocols TLSv1.2 TLSv1.3;
-root /var/www/html;
-
-location ~ \.php$ {
-    fastcgi_pass wordpress:9000;
-}
-```
-
-Explanation points:
-
-- NGINX handles TLS termination.
-- `ssl_protocols TLSv1.2 TLSv1.3;` limits HTTPS to TLS 1.2 or newer.
-- NGINX does not process PHP itself; it forwards PHP requests to PHP-FPM at `wordpress:9000`.
-- `daemon off;` keeps NGINX as the main PID 1 process.
-
-## 6. Commands for Managing Containers, Images, and Volumes
+## Container and Volume Management Commands
 
 Status:
 
 ```sh
 docker compose -f srcs/docker-compose.yml ps
-docker ps
+docker images | grep -E 'mariadb|wordpress|nginx'
+docker network ls
+docker volume ls
+```
+
+Inspect:
+
+```sh
+make inspect-nginx
+make inspect-wordpress
+make inspect-mariadb
 ```
 
 Logs:
@@ -355,46 +346,31 @@ docker compose -f srcs/docker-compose.yml logs wordpress
 docker compose -f srcs/docker-compose.yml logs mariadb
 ```
 
-Images:
+Shell:
 
 ```sh
-docker images | grep -E 'mariadb|wordpress|nginx'
+docker exec -it nginx sh
+docker exec -it wordpress sh
+docker exec -it mariadb sh
 ```
 
-Network:
+Volume inspection:
 
 ```sh
-docker network ls | grep network_cake
-docker network inspect srcs_network_cake
-```
-
-Volumes:
-
-```sh
-docker volume ls
 docker volume inspect srcs_mariadb_data
 docker volume inspect srcs_wordpress_data
 ```
 
-Enter containers:
+Expected host devices:
 
-```sh
-docker exec --interactive --tty mariadb sh
-docker exec --interactive --tty wordpress sh
-docker exec --interactive --tty nginx sh
+```text
+/home/tvaroux/data/mariadb
+/home/tvaroux/data/wordpress
 ```
 
-Makefile inspect targets:
+## Data Persistence
 
-```sh
-make inspect-nginx
-make inspect-wordpress
-make inspect-mariadb
-```
-
-## 7. Data Storage and Persistence
-
-Compose volumes:
+Compose volume definition:
 
 ```yaml
 volumes:
@@ -413,140 +389,289 @@ volumes:
       type: none
 ```
 
-Storage locations:
+Persistence summary:
 
-| Data | Inside container | Host side |
-|---|---|---|
-| MariaDB DB files | `/var/lib/mysql` | `/home/tvaroux/data/mariadb` |
-| WordPress files | `/var/www/html` | `/home/tvaroux/data/wordpress` |
+| Data | Host path | Container path |
+| --- | --- | --- |
+| MariaDB database | `/home/tvaroux/data/mariadb` | `/var/lib/mysql` |
+| WordPress files | `/home/tvaroux/data/wordpress` | `/var/www/html` |
 
-Persistence explanation:
+Why this persists:
 
-- Docker volume names include the Compose project name, for example `srcs_mariadb_data`.
-- The real storage is not only Docker's internal volume directory; it is bind-mounted to `/home/tvaroux/data/...`.
-- If the host-side directories remain, database and WordPress files remain even after containers are removed.
-- To fully reset the project, run `make down-v` and also delete the contents of `/home/tvaroux/data/mariadb` and `/home/tvaroux/data/wordpress`.
+- Containers are disposable.
+- The data directories are mounted from the host.
+- Rebuilding images or recreating containers does not delete the host paths.
+- `restart: always` allows containers to restart after Docker or VM restart.
 
-Persistence demo:
+Review demo:
 
 ```sh
-# 1. Add a post or comment from the WordPress admin panel
-# 2. Stop the containers
 make down
-
-# 3. Start again
 make up-no-build
-
-# 4. Confirm that the added content remains through the browser or SQL
+curl -vk https://127.0.0.1/
 ```
 
-SQL check:
+Then show the edited WordPress content still exists.
 
-```sh
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SELECT ID, post_title, post_status, post_type FROM wp_posts WHERE post_type = '\''post'\'';"'
-```
+## Verification and Defense Commands
 
-## 8. Review Check Commands
-
-Forbidden-item checks:
-
-```sh
-grep -rnE 'network:\s*host|links:|--link' srcs Makefile || echo "OK: no forbidden network setting"
-grep -rnE 'tail -f|sleep infinity|/dev/null|/dev/random|& *bash|& *sh' srcs/requirements/*/Dockerfile srcs/requirements/*/tools || echo "OK: no fake daemon keepalive"
-grep -n '^FROM' srcs/requirements/*/Dockerfile
-```
-
-Compose status:
+### General checks
 
 ```sh
 docker compose -f srcs/docker-compose.yml ps
+docker images | grep -E 'mariadb|wordpress|nginx'
+docker network ls | grep network_cake
+docker volume ls
 ```
 
-HTTPS:
+### Forbidden pattern checks
 
 ```sh
-curl --insecure --verbose https://127.0.0.1/
-openssl s_client -connect tvaroux.42.fr:443 -tls1_2 </dev/null 2>&1 | grep -E "Protocol|Cipher|CONNECTED"
-openssl s_client -connect tvaroux.42.fr:443 -tls1_3 </dev/null 2>&1 | grep -E "Protocol|Cipher|CONNECTED"
+grep -rnE 'network:\s*host|links:|--link' srcs Makefile || echo "OK: no forbidden network shortcut"
+grep -rnE 'tail -f|sleep infinity|/dev/null|/dev/random|& *bash|& *sh' srcs/requirements/*/Dockerfile srcs/requirements/*/tools || echo "OK: no fake keepalive"
+grep -n '^FROM' srcs/requirements/*/Dockerfile
 ```
 
-WordPress:
+Defense explanation: containers stay alive because the real service process runs
+in the foreground. They are not kept alive by fake loops.
+
+Foreground commands:
+
+- NGINX: `nginx -g 'daemon off;'`
+- WordPress: `exec php-fpm83 -F`
+- MariaDB: `exec mariadbd --user=mysql`
+
+### TLS checks
 
 ```sh
-docker exec wordpress wp --allow-root --path=/var/www/html user list
-docker exec wordpress wp --allow-root --path=/var/www/html option get siteurl
+curl -vk https://127.0.0.1/
+openssl s_client -connect 127.0.0.1:443 -tls1_2 </dev/null
+openssl s_client -connect 127.0.0.1:443 -tls1_3 </dev/null
 ```
 
-MariaDB:
+Explain:
+
+- NGINX handles HTTPS.
+- `ssl_protocols TLSv1.2 TLSv1.3;` is configured.
+- The certificate is self-signed for this local project.
+- Only `443:443` is published.
+
+### SQL checks
+
+Enter MariaDB:
 
 ```sh
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SHOW TABLES;"'
-
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u root -e "SELECT User, Host, plugin FROM mysql.user;"'
+docker exec -it mariadb sh
 ```
 
-Volumes:
+Connect to the WordPress database:
 
 ```sh
-docker volume inspect srcs_mariadb_data --format '{{ .Options.device }}'
-docker volume inspect srcs_wordpress_data --format '{{ .Options.device }}'
+mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE"
 ```
 
-## 9. Common Problems and Explanations
+Useful SQL:
 
-### Secrets Cannot Be Found
+```sql
+SHOW TABLES;
 
-Symptom:
+SELECT ID, post_title, post_status, post_type
+FROM wp_posts
+WHERE post_type = 'post';
+
+SELECT comment_ID, comment_author, comment_content, comment_approved
+FROM wp_comments;
+
+SELECT ID, user_login, user_email
+FROM wp_users;
+
+SELECT option_name, option_value
+FROM wp_options
+WHERE option_name IN ('siteurl', 'home', 'blogname');
+```
+
+One-line check:
+
+```sh
+docker exec -it mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SHOW TABLES;"'
+```
+
+This proves that WordPress initialized the database and that real site data is
+stored in MariaDB.
+
+### Backup and restore
+
+Backup:
+
+```sh
+docker compose -f srcs/docker-compose.yml exec mariadb sh -c 'mariadb-dump -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE"' > backup.sql
+```
+
+Restore:
+
+```sh
+docker compose -f srcs/docker-compose.yml exec -T mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE"' < backup.sql
+```
+
+## Configuration Change Example
+
+If the evaluator asks to change the public HTTPS port, change only the host side
+of the mapping:
+
+```yaml
+ports:
+  - "8443:443"
+```
+
+Then recreate containers:
+
+```sh
+make down
+make up-no-build
+curl -vk https://127.0.0.1:8443/
+```
+
+If the NGINX listening port inside the container is changed, update both
+`zzz-nginx.conf` and the Compose mapping, then rebuild because the config is
+copied into the image:
+
+```sh
+make down
+make build
+make up-no-build
+```
+
+## Clean Evaluation Start
+
+The evaluator may ask to start from a clean Docker state. These commands are
+usually run manually, not from the project Makefile:
+
+```sh
+docker stop $(docker ps -qa)
+docker rm $(docker ps -qa)
+docker rmi -f $(docker images -qa)
+docker volume rm $(docker volume ls -q)
+docker network rm $(docker network ls -q) 2>/dev/null
+sudo rm -rf /home/tvaroux/data/*
+mkdir -p /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+```
+
+Then recreate:
+
+```sh
+cp srcs/.env_sample srcs/.env
+mkdir -p secrets
+printf '%s' 'database_user_password' > secrets/db_password.txt
+printf '%s' 'database_root_password' > secrets/db_root_password.txt
+printf '%s' 'wordpress_admin_password' > secrets/wp_admin_password.txt
+printf '%s' 'wordpress_editor_password' > secrets/wp_editor_password.txt
+make up
+```
+
+## Quick Oral Defense Notes
+
+- Docker packages each service and its dependencies into a reproducible image.
+- Compose connects services, secrets, volumes, and network in one file.
+- A VM virtualizes a whole OS; Docker isolates processes while sharing the host
+  kernel.
+- Secrets are mounted as files in `/run/secrets/`; `.env` is for non-secret
+  configuration.
+- `network_cake` is a bridge network; host network mode is not used.
+- Service names provide DNS: `wordpress` and `mariadb`.
+- Only NGINX exposes a host port.
+- Volumes persist data under `/home/tvaroux/data/...`.
+- PID 1 is the real service process, so containers stop and receive signals
+  correctly.
+- MariaDB initialization is guarded by `/var/lib/mysql/mysql`, so restarts do
+  not overwrite data.
+- WordPress initialization is guarded by existing core/config/install state.
+
+## レビュー用カンペ
+
+### 何を作ったか
+
+Docker Compose で WordPress サイトを構築しました。構成は `nginx`、
+`wordpress`、`mariadb` の 3 コンテナです。外部公開は NGINX の `443`
+だけで、WordPress と MariaDB は Docker bridge network の中だけで通信します。
+
+### Docker と VM の違い
+
+VM は OS 丸ごとを仮想化します。Docker は host kernel を共有し、process と
+filesystem と network を分離します。そのため Docker container は軽く、build
+した image から同じ runtime を再現しやすいです。
+
+### Compose を使う理由
+
+`docker run` だけだと network、volume、secret、依存関係を毎回手で指定する必要があります。
+Compose なら `srcs/docker-compose.yml` に 3 service、network、volume、secret をまとめて宣言できます。
+
+### Secrets と `.env`
+
+`.env` は `DOMAIN_NAME`、DB 名、ユーザー名のような非機密設定です。password は
+`secrets/*.txt` に置き、container 内では `/run/secrets/...` の file として読みます。
+password を environment variable に置くより、`docker inspect` や process environment に出にくい設計です。
+
+### Network
+
+`network_cake` は bridge network です。host network は使っていません。Docker DNS
+により、NGINX は `wordpress:9000`、WordPress は `mariadb:3306` で接続できます。
+
+### Volume と永続化
+
+Compose volume は local driver の bind option で host directory に結びつけています。
 
 ```text
-cat: can't open '/run/secrets/db_password': No such file or directory
+/home/tvaroux/data/mariadb    -> /var/lib/mysql
+/home/tvaroux/data/wordpress  -> /var/www/html
 ```
 
-Causes:
+container は disposable ですが、data は host 側に残るため、`make down` や rebuild 後も
+WordPress の記事、コメント、DB table は残ります。
 
-- The secret file does not exist.
-- The filename differs from the Compose definition.
-- The container was started with raw `docker run` instead of Compose, and the secret was not mounted.
+### PID 1 と foreground
 
-Checks:
-
-```sh
-ls -l secrets/
-docker compose -f srcs/docker-compose.yml config
-```
-
-### WordPress Cannot Connect to the Database
-
-Check:
-
-```sh
-docker compose -f srcs/docker-compose.yml logs wordpress
-docker compose -f srcs/docker-compose.yml logs mariadb
-```
-
-Explanation:
-
-- WordPress connects to `mariadb:3306`.
-- It does not connect to `localhost`. Inside a container, `localhost` means the WordPress container itself.
-- The MariaDB user is created as `'wpuser'@'%'`, which allows TCP connections from other containers.
-
-### `wpuser@localhost` Is Rejected
-
-Example:
+container は PID 1 の process が終了すると止まります。この project は fake keepalive
+ではなく、本物の service を foreground で動かしています。
 
 ```text
-ERROR 1045 (28000): Access denied for user 'wpuser'@'localhost'
+nginx      -> nginx -g 'daemon off;'
+wordpress  -> exec php-fpm83 -F
+mariadb    -> exec mariadbd --user=mysql
 ```
 
-Explanation:
+`exec` を使うことで shell ではなく service process が PID 1 になり、stop signal を受け取れます。
 
-- `wpuser` is created as `wpuser@'%'`.
-- If you connect from inside a container using `localhost`, MariaDB may treat it as a UNIX socket or local connection and match a different account.
-- WordPress uses the `mariadb` host name over TCP, so this is not a problem for the application.
+### MariaDB 初期化
 
-## 10. Short Oral Summary
+`/var/lib/mysql/mysql` がない初回だけ `mariadb-install-db` します。その後 temporary
+server を `--skip-networking` で起動し、DB と user を作って権限を付与します。最後に temporary
+server を止め、本番の `mariadbd` を foreground で起動します。
 
-This project separates NGINX, WordPress/PHP-FPM, and MariaDB into one container per service, then manages networks, secrets, and volumes with Docker Compose. The only external entry point is NGINX HTTPS on port `443`; WordPress runs as PHP-FPM on `9000`, and MariaDB is used internally on `3306`. Data is bind-mounted to `/home/tvaroux/data/mariadb` and `/home/tvaroux/data/wordpress`, so it persists even if containers are recreated. Passwords are not committed to Git; they are read from Docker secrets mounted under `/run/secrets/`.
+### WordPress 初期化
+
+WordPress は MariaDB が認証付き ping に応答するまで待ちます。その後、core download、
+`wp-config.php` 作成、`wp core install`、editor user 作成を初回だけ行い、最後に
+PHP-FPM を foreground で起動します。
+
+### 評価で即出せる確認コマンド
+
+```sh
+docker compose -f srcs/docker-compose.yml ps
+docker images | grep -E 'mariadb|wordpress|nginx'
+docker network ls | grep network_cake
+docker volume ls
+make curl-https
+```
+
+SQL で WordPress data を見る:
+
+```sh
+docker exec -it mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SHOW TABLES;"'
+```
+
+TLS を見る:
+
+```sh
+openssl s_client -connect 127.0.0.1:443 -tls1_2 </dev/null
+openssl s_client -connect 127.0.0.1:443 -tls1_3 </dev/null
+```

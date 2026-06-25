@@ -59,8 +59,8 @@ inspect-test:
 	@$(MAKE) --no-print-directory inspect CONTAINER=test
 
 fclean: down-v
-	sudo rm -rf /home/torinoue/data/mariadb /home/torinoue/data/wordpress
-	mkdir -p /home/torinoue/data/mariadb /home/torinoue/data/wordpress
+	sudo rm -rf /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+	mkdir -p /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
 
 # fclean のあと、イメージをキャッシュ無しで作り直してバックグラウンド起動（評価前のゼロ再現用）
 rebuild: fclean

@@ -1,0 +1,7 @@
+*
+!Dockerfile
+!.dockerignore
+!conf/
+!conf/zzz-mariadb.cnf
+!tools/
+!tools/entrypoint.sh

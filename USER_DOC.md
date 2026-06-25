@@ -1,84 +1,66 @@
-# USER_DOC.md - Inception User Documentation
+# USER_DOC - User Operation Guide
 
-This document is for end users or administrators who operate the Inception stack. It also works as a review cheat sheet by summarizing the service roles, start/stop commands, access URLs, credential management, and health checks.
+This document explains how to use the Inception stack as an end user or
+administrator. It is also written as a quick defense note for review.
 
-## 1. Services Provided by This Stack
+## Service Overview
 
-This project starts three containers with Docker Compose and provides a WordPress site over HTTPS.
+This project runs a WordPress website with three Docker containers.
 
-| Service | Container name | Role | Exposed externally |
-|---|---|---|---|
-| NGINX | `nginx` | HTTPS entry point. Terminates TLS and forwards PHP requests to WordPress | `443:443` |
-| WordPress + PHP-FPM | `wordpress` | WordPress application and PHP runtime. Initial setup is done with `wp-cli` | No |
-| MariaDB | `mariadb` | Database that stores WordPress posts, users, comments, and settings | No |
+| Service | Role | Access |
+| --- | --- | --- |
+| `nginx` | Public HTTPS entry point and TLS termination | Host port `443` |
+| `wordpress` | WordPress application running through PHP-FPM | Internal port `9000` |
+| `mariadb` | Database used by WordPress | Internal port `3306` |
 
 Request flow:
 
 ```text
 Browser
-  |
-  | HTTPS :443
-  v
-NGINX
-  |
-  | FastCGI :9000
-  v
-WordPress / PHP-FPM
-  |
-  | SQL :3306
-  v
-MariaDB
+  -> HTTPS :443
+  -> NGINX
+  -> FastCGI wordpress:9000
+  -> WordPress / PHP-FPM
+  -> SQL mariadb:3306
+  -> MariaDB
 ```
 
-Key points:
+Only NGINX is exposed to the host. WordPress and MariaDB stay private inside
+the Docker bridge network.
 
-- Only NGINX port `443` is exposed to the host.
-- WordPress and MariaDB communicate through the internal Docker network `network_cake`.
-- WordPress files and MariaDB data are persisted under `/home/tvaroux/data/`.
-- Passwords are not stored in `.env`; they are mounted as Docker secrets under `/run/secrets/`.
+## Start and Stop the Project
 
-## 2. Starting and Stopping
-
-Run commands from the repository root, where the `Makefile` is located.
+Run commands from the repository root:
 
 ```sh
-cd /home/tvaroux/Desktop/inception/tom_inception_0622
+cd tom_inception_0622
 ```
 
-Start:
+Before the first start, the host data directories must exist:
+
+```sh
+mkdir -p /home/tvaroux/data/mariadb
+mkdir -p /home/tvaroux/data/wordpress
+```
+
+Start the stack:
 
 ```sh
 make up
 ```
 
-`make up` runs `docker compose -f ./srcs/docker-compose.yml up --detach --build`. It builds images if needed and starts the containers in the background.
+This builds the images if needed and starts the containers in the background.
 
-Stop:
+Stop the stack but keep persistent data:
 
 ```sh
 make down
 ```
 
-This stops and removes the containers. Images, Docker volumes, and host-side data remain.
-
-Stop and remove Docker volumes:
-
-```sh
-make down-v
-```
-
-This removes Docker volumes too. In this project, however, the volumes are bind-mounted to `/home/tvaroux/data/mariadb` and `/home/tvaroux/data/wordpress`, so check the host-side data as well if you want a full reset.
-
-Restart:
+Restart the stack:
 
 ```sh
 make re
-```
-
-Build only:
-
-```sh
-make build
 ```
 
 Start existing images without rebuilding:
@@ -87,87 +69,125 @@ Start existing images without rebuilding:
 make up-no-build
 ```
 
-## 3. Accessing the Website and Admin Panel
+Stop containers and remove Docker Compose volumes:
 
-Normal website URL:
+```sh
+make down-v
+```
+
+Important: `make down-v` removes Docker volume objects, but the real data is
+stored in `/home/tvaroux/data/mariadb` and `/home/tvaroux/data/wordpress`.
+Delete those directories only when you really want a clean installation.
+
+## Access the Website and Admin Panel
+
+Main URLs:
 
 ```text
 https://tvaroux.42.fr
-```
-
-Local check:
-
-```text
 https://127.0.0.1
 ```
 
-WordPress admin panel:
+If `tvaroux.42.fr` does not resolve, add this on the VM or evaluation host:
+
+```text
+127.0.0.1 tvaroux.42.fr
+```
+
+The TLS certificate is self-signed, so the browser may show a warning. This is
+expected for this project.
+
+WordPress administration panel:
 
 ```text
 https://tvaroux.42.fr/wp-admin
-```
-
-Local admin check:
-
-```text
 https://127.0.0.1/wp-admin
 ```
 
-The project uses a self-signed certificate, so browsers may show a warning. This is expected for this project.
+The administrator username comes from `srcs/.env`:
 
-## 4. Locating and Managing Credentials
+```env
+WP_ADMIN_USER=ado
+```
 
-Non-secret configuration is stored in `srcs/.env`.
+The editor username comes from `srcs/.env`:
 
-Main settings used by this project:
+```env
+WP_USER=wpeditor
+```
+
+The subject forbids using an admin username containing `admin` or `Admin`, so
+this project uses a custom admin username.
+
+## Locate and Manage Credentials
+
+Non-secret configuration is stored in:
+
+```text
+srcs/.env
+```
+
+Create it from the sample:
+
+```sh
+cp srcs/.env_sample srcs/.env
+```
+
+Current sample values:
 
 ```env
 DOMAIN_NAME=tvaroux.42.fr
+
 MARIADB_DATABASE=wordpress
 MARIADB_USER=wpuser
 MARIADB_PORT=3306
+
 WP_ADMIN_USER=ado
 WP_ADMIN_EMAIL=ado@example.com
 WP_USER=wpeditor
 WP_USER_EMAIL=editor@example.com
 ```
 
-Passwords are managed as files under `secrets/`.
-
-Secret files referenced by Compose:
+Passwords are stored as Docker secret files under:
 
 ```text
-secrets/db_password.txt
-secrets/db_root_password.txt
-secrets/wp_admin_password.txt
-secrets/wp_editor_password.txt
+secrets/
 ```
 
-Inside containers, they appear as:
+Create them before starting the stack:
 
-```text
-/run/secrets/db_password
-/run/secrets/db_root_password
-/run/secrets/wp_admin_password
-/run/secrets/wp_editor_password
+```sh
+mkdir -p secrets
+printf '%s' 'database_user_password' > secrets/db_password.txt
+printf '%s' 'database_root_password' > secrets/db_root_password.txt
+printf '%s' 'wordpress_admin_password' > secrets/wp_admin_password.txt
+printf '%s' 'wordpress_editor_password' > secrets/wp_editor_password.txt
 ```
 
-Management notes:
+Credential mapping:
 
-- `srcs/.env` stores only non-secret values such as usernames, domain names, and database names.
-- Passwords are stored in secret files and must not be committed to Git.
-- After the first WordPress install, changing the WordPress password secret does not automatically update existing user passwords. Change them through the admin panel or `wp-cli`.
-- If `db_password` is changed while persistent data remains, the existing `wp-config.php` is not updated automatically. It must be updated separately.
+| Secret file | Used for | Container path |
+| --- | --- | --- |
+| `secrets/db_password.txt` | MariaDB WordPress user password | `/run/secrets/db_password` |
+| `secrets/db_root_password.txt` | MariaDB root secret file | `/run/secrets/db_root_password` |
+| `secrets/wp_admin_password.txt` | WordPress admin password | `/run/secrets/wp_admin_password` |
+| `secrets/wp_editor_password.txt` | WordPress editor password | `/run/secrets/wp_editor_password` |
 
-## 5. Checking That Services Are Running Correctly
+Do not commit `srcs/.env` or files inside `secrets/`.
 
-Container status:
+If a password is changed after WordPress has already been installed, existing
+WordPress users and `wp-config.php` are not automatically rewritten. For a clean
+password reset during evaluation, remove the persistent data and start again.
+
+## Check That Services Are Running
+
+Check container status:
 
 ```sh
 docker compose -f srcs/docker-compose.yml ps
 ```
 
-Individual checks through the Makefile:
+Or use the Makefile shortcuts:
 
 ```sh
 make inspect-nginx
@@ -175,26 +195,28 @@ make inspect-wordpress
 make inspect-mariadb
 ```
 
-HTTPS check:
+Check HTTPS from the command line:
 
 ```sh
 make curl-https
 ```
 
-Or:
+Direct TLS check:
 
 ```sh
-curl --insecure --verbose https://127.0.0.1/
+curl -vk https://127.0.0.1/
+openssl s_client -connect 127.0.0.1:443 -tls1_2 </dev/null
+openssl s_client -connect 127.0.0.1:443 -tls1_3 </dev/null
 ```
 
-TLS version check:
+Expected explanation:
 
-```sh
-openssl s_client -connect tvaroux.42.fr:443 -tls1_2 </dev/null 2>&1 | grep -E "Protocol|Cipher|CONNECTED"
-openssl s_client -connect tvaroux.42.fr:443 -tls1_3 </dev/null 2>&1 | grep -E "Protocol|Cipher|CONNECTED"
-```
+- HTTPS is handled by NGINX.
+- Only port `443` is published by Compose.
+- TLS versions allowed by NGINX are `TLSv1.2` and `TLSv1.3`.
+- The certificate is self-signed.
 
-Logs:
+Check logs:
 
 ```sh
 docker compose -f srcs/docker-compose.yml logs nginx
@@ -202,34 +224,141 @@ docker compose -f srcs/docker-compose.yml logs wordpress
 docker compose -f srcs/docker-compose.yml logs mariadb
 ```
 
-WordPress users:
+## WordPress Data Check
+
+To prove the database is initialized and not empty:
 
 ```sh
-docker exec wordpress wp --allow-root --path=/var/www/html user list
+docker exec -it mariadb sh
+mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE"
 ```
 
-Check whether MariaDB contains WordPress data:
+Useful SQL:
+
+```sql
+SHOW TABLES;
+
+SELECT ID, post_title, post_status, post_type
+FROM wp_posts
+WHERE post_type = 'post';
+
+SELECT comment_ID, comment_author, comment_content, comment_approved
+FROM wp_comments;
+
+SELECT ID, user_login, user_email
+FROM wp_users;
+```
+
+Exit with:
+
+```sql
+exit;
+```
+
+Then leave the container shell:
 
 ```sh
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SHOW TABLES;"'
+exit
 ```
 
-Check posts, comments, and users:
+One-line table check from the host:
 
 ```sh
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SELECT ID, post_title, post_status, post_type FROM wp_posts WHERE post_type = '\''post'\'';"'
-
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SELECT comment_ID, comment_author, comment_content, comment_approved FROM wp_comments;"'
-
-docker exec --interactive --tty mariadb sh -c \
-  'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SELECT ID, user_login, user_email FROM wp_users;"'
+docker exec -it mariadb sh -c 'mariadb -u"$MARIADB_USER" -p"$(cat /run/secrets/db_password)" "$MARIADB_DATABASE" -e "SHOW TABLES;"'
 ```
 
-Review explanation points:
+## Persistence Check
 
-- If `SHOW TABLES;` shows tables such as `wp_posts`, `wp_users`, and `wp_options`, the WordPress database has been initialized.
-- After adding a comment or post in the browser, you can confirm the same content through SQL.
-- If data remains under `/home/tvaroux/data/`, WordPress content persists even when containers are recreated.
+Data persists because Docker volumes are bound to host directories:
+
+| Data | Host path | Container path |
+| --- | --- | --- |
+| MariaDB database files | `/home/tvaroux/data/mariadb` | `/var/lib/mysql` |
+| WordPress files | `/home/tvaroux/data/wordpress` | `/var/www/html` |
+
+Review demo:
+
+1. Add a post, page, or comment in WordPress.
+2. Run `make down`.
+3. Run `make up-no-build`.
+4. Open the site again.
+5. Confirm the content is still present.
+6. Optionally confirm the same content with SQL.
+
+For a completely clean reinstall:
+
+```sh
+make down-v
+sudo rm -rf /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+mkdir -p /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
+make up
+```
+
+## Troubleshooting
+
+If the site shows `502 Bad Gateway`, WordPress or PHP-FPM may still be starting.
+Wait a few seconds and check:
+
+```sh
+docker compose -f srcs/docker-compose.yml logs wordpress
+```
+
+If WordPress cannot connect to the database, check:
+
+```sh
+docker compose -f srcs/docker-compose.yml ps mariadb
+docker compose -f srcs/docker-compose.yml logs mariadb
+ls -l secrets/
+cat srcs/.env
+```
+
+If the browser cannot open `https://tvaroux.42.fr`, use `https://127.0.0.1` or
+check `/etc/hosts`.
+
+## レビュー用カンペ
+
+このスタックで提供しているもの:
+
+- WordPress サイトを提供しています。
+- 外から直接アクセスできるのは NGINX の HTTPS `443` だけです。
+- NGINX は TLS を終端し、PHP は `wordpress:9000` に FastCGI で渡します。
+- WordPress は `mariadb:3306` に接続して記事、ユーザー、コメントを保存します。
+
+起動と停止:
+
+```sh
+make up      # build して detached 起動
+make down    # container 停止と削除、data は保持
+make down-v  # compose volume も削除
+make re      # down -> up
+```
+
+アクセス先:
+
+```text
+Site:  https://tvaroux.42.fr または https://127.0.0.1
+Admin: https://tvaroux.42.fr/wp-admin
+```
+
+認証情報の場所:
+
+- ユーザー名やドメインは `srcs/.env`。
+- パスワードは `secrets/*.txt`。
+- container 内では `/run/secrets/...` として読まれます。
+- secret は Git に入れません。
+
+正常稼働の確認:
+
+```sh
+docker compose -f srcs/docker-compose.yml ps
+make curl-https
+make inspect-nginx
+make inspect-wordpress
+make inspect-mariadb
+```
+
+永続化の説明:
+
+- DB 実体は `/home/tvaroux/data/mariadb` に残ります。
+- WordPress ファイルは `/home/tvaroux/data/wordpress` に残ります。
+- container や image を作り直しても、この host 側 data を消さない限りサイト内容は残ります。

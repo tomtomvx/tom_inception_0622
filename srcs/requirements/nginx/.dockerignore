@@ -1,0 +1,6 @@
+*
+!Dockerfile
+!.dockerignore
+
+!conf/
+!conf/zzz-nginx.conf
