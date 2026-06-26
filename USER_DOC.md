@@ -157,11 +157,9 @@ secrets/
 Create them before starting the stack:
 
 ```sh
-mkdir -p secrets
-printf '%s' 'database_user_password' > secrets/db_password.txt
-printf '%s' 'database_root_password' > secrets/db_root_password.txt
-printf '%s' 'wordpress_admin_password' > secrets/wp_admin_password.txt
-printf '%s' 'wordpress_editor_password' > secrets/wp_editor_password.txt
+echo -n pw > secrets/db_password.txt
+echo -n pw > secrets/wp_admin_password.txt
+echo -n pw > secrets/wp_editor_password.txt
 ```
 
 Credential mapping:
@@ -169,7 +167,6 @@ Credential mapping:
 | Secret file | Used for | Container path |
 | --- | --- | --- |
 | `secrets/db_password.txt` | MariaDB WordPress user password | `/run/secrets/db_password` |
-| `secrets/db_root_password.txt` | MariaDB root secret file | `/run/secrets/db_root_password` |
 | `secrets/wp_admin_password.txt` | WordPress admin password | `/run/secrets/wp_admin_password` |
 | `secrets/wp_editor_password.txt` | WordPress editor password | `/run/secrets/wp_editor_password` |
 

@@ -31,7 +31,7 @@ Dockerfile, configuration, and startup script under
 │  │  └────┬────┘    └──────┬──────┘    └──────┬──────┘    │  │
 │  │       │                │                  │           │  │
 │  │       └────────────────┴──────────────────┘           │  │
-│  │                 tvaroux_network (bridge)             │  │
+│  │                 tvaroux_network (bridge)              │  │
 │  │                                                       │  │
 │  │       [volumes: wordpress, mariadb]                   │  │
 │  └──────────────── │  ───────────────────────────────────┘  │
@@ -45,8 +45,8 @@ Dockerfile, configuration, and startup script under
 │                Bind (o: bind)                               │ 
 │                    │                                        │
 │          [device volumes]                                   │
-│            /home/tvaroux/data/wordpress                    │
-│            /home/tvaroux/data/mariadb                      │
+│            /home/tvaroux/data/wordpress                     │
+│            /home/tvaroux/data/mariadb                       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -105,7 +105,7 @@ secrets.
 Run commands from the project root:
 
 ```sh
-cd tom_inception_0622
+cd "your directory name"
 ```
 
 Docker Engine and Docker Compose must be installed.
@@ -158,11 +158,9 @@ If needed, add the domain to `/etc/hosts` on the VM or evaluation host:
 Create the secret files expected by Compose:
 
 ```sh
-mkdir -p secrets
-printf 'database_user_password\n' > secrets/db_password.txt
-printf 'database_root_password\n' > secrets/db_root_password.txt
-printf 'wordpress_admin_password\n' > secrets/wp_admin_password.txt
-printf 'wordpress_editor_password\n' > secrets/wp_editor_password.txt
+echo -n pw > secrets/db_password.txt
+echo -n pw > secrets/wp_admin_password.txt
+echo -n pw > secrets/wp_editor_password.txt
 ```
 
 These files contain credentials and must not be committed to Git.
@@ -351,7 +349,6 @@ independently.
 The Compose file declares these Docker secrets:
 
 - `db_password`
-- `db_root_password`
 - `wp_admin_password`
 - `wp_editor_password`
 

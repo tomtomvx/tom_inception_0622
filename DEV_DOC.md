@@ -102,11 +102,9 @@ Important defense point: the WordPress administrator username must not contain
 The Compose file expects four host files:
 
 ```sh
-mkdir -p secrets
-printf '%s' 'database_user_password' > secrets/db_password.txt
-printf '%s' 'database_root_password' > secrets/db_root_password.txt
-printf '%s' 'wordpress_admin_password' > secrets/wp_admin_password.txt
-printf '%s' 'wordpress_editor_password' > secrets/wp_editor_password.txt
+echo -n pw > secrets/db_password.txt
+echo -n pw > secrets/wp_admin_password.txt
+echo -n pw > secrets/wp_editor_password.txt
 ```
 
 Compose maps them to secret names:
@@ -114,7 +112,6 @@ Compose maps them to secret names:
 | Compose secret | Host file | Runtime path |
 | --- | --- | --- |
 | `db_password` | `../secrets/db_password.txt` | `/run/secrets/db_password` |
-| `db_root_password` | `../secrets/db_root_password.txt` | `/run/secrets/db_root_password` |
 | `wp_admin_password` | `../secrets/wp_admin_password.txt` | `/run/secrets/wp_admin_password` |
 | `wp_editor_password` | `../secrets/wp_editor_password.txt` | `/run/secrets/wp_editor_password` |
 

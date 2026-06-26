@@ -82,8 +82,4 @@ rmvol:
 rmnet:
 	-docker network rm $$(docker network ls -q) 2>/dev/null
 
-# .PHONY: all up build up-no-build down down-v
-
-# .PHONY: all build up up-no-build down down-v re browser curl-https inspect inspect-mariadb inspect-wordpress inspect-nginx inspect-test fclean rebuild
-
 .PHONY: all build up up-no-build down down-v re browser curl-https inspect inspect-mariadb inspect-wordpress inspect-nginx inspect-test fclean rebuild stop rm rmimg rmvol rmnet
