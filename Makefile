@@ -5,13 +5,12 @@
 
 DC = docker compose -f ./srcs/docker-compose.yml
 
+all: up
 
 # detach: 起動後のターミナルを占有しない
 # build: ビルド済みのイメージがあれば再ビルドしない
 up:
 	$(DC) up --detach --build
-
-all: up
 
 build:
 	$(DC) build
