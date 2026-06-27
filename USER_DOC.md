@@ -1,7 +1,7 @@
 # USER_DOC - User Operation Guide
 
 This document explains how an end user or administrator can operate the
-Inception stack. It can also be used directly as a quick review cheat sheet.
+Inception stack.
 
 ## Service Overview
 

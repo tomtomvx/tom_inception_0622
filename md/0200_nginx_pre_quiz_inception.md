@@ -99,9 +99,9 @@ TLS 1.3 は「セキュリティの向上」と「パフォーマンスの改善
 **自分の回答：**
 - その出所を証明する必要がある秘密鍵ファイル
 - 作成する証明書の名前がついたファイル
-秘密鍵の作成:`openssl x509 genrsa -out torinoue.key 2048`
-証明書署名要求:`openssl x509 req -out torinoue.csr -key torinoue.key -new`
-証明書の内容確認(念の為):`openssl x509 -in torinoue.crt -text -noout`
+秘密鍵の作成:`openssl x509 genrsa -out tvaroux.key 2048`
+証明書署名要求:`openssl x509 req -out tvaroux.csr -key tvaroux.key -new`
+証明書の内容確認(念の為):`openssl x509 -in tvaroux.crt -text -noout`
 
 **正解：**
 最低限必要なファイルは以下の2つ:
