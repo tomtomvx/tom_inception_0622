@@ -140,6 +140,9 @@ Example:
 
 ```env
 DOMAIN_NAME=tvaroux.42.fr
+
+MARIADB_DATABASE=wordpress
+MARIADB_USER=wpuser
 MARIADB_PORT=3306
 
 WP_ADMIN_USER=ado

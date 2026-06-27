@@ -34,7 +34,7 @@ the Docker bridge network.
 Run commands from the repository root.
 
 ```sh
-cd <your_repozitory>
+cd <your_repository>
 ```
 
 Before the first start, create the host-side persistent data directories.
@@ -88,6 +88,7 @@ Normal URLs:
 ```text
 https://tvaroux.42.fr
 https://127.0.0.1
+https://localhost
 ```
 
 If `tvaroux.42.fr` does not resolve, add it to `/etc/hosts` on the VM or

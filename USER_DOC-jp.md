@@ -1,4 +1,4 @@
-# USER_DOC_jp - ユーザー向け操作ドキュメント
+# USER_DOC-jp - ユーザー向け操作ドキュメント
 
 このドキュメントは、Inception スタックを操作するエンドユーザーまたは管理者向けの説明です。
 レビュー中にそのまま確認できるカンペとしても使えます。
@@ -32,7 +32,7 @@ Browser
 コマンドは repository root で実行します。
 
 ```sh
-cd <your_repozitory>
+cd <your_repository>
 ```
 
 初回起動前に、host 側の永続化 directory を作成します。
@@ -85,6 +85,7 @@ make down-v
 ```text
 https://tvaroux.42.fr
 https://127.0.0.1
+https://localhost
 ```
 
 `tvaroux.42.fr` が解決できない場合は、VM または評価 host の `/etc/hosts` に追加します。

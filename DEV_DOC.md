@@ -11,9 +11,9 @@ check, and explain this Inception project from scratch.
 |-- README.md
 |-- README-jp.md
 |-- USER_DOC.md
-|-- USER_DOC_jp.md
+|-- USER_DOC-jp.md
 |-- DEV_DOC.md
-|-- DEV_DOC_jp.md
+|-- DEV_DOC-jp.md
 |-- secrets/
 |   `-- .gitignore
 `-- srcs/
@@ -42,7 +42,7 @@ The full stack is defined in `srcs/docker-compose.yml`.
 Run project commands from the repository root.
 
 ```sh
-cd <your_repozitory>
+cd <your_repository>
 ```
 
 Requirements:
