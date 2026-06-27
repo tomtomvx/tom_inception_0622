@@ -1,9 +1,9 @@
-# DEV_DOC - Developer Documentation
+# DEV_DOC_jp - 開発者向け技術ドキュメント
 
-This document is a technical note for developers to set up, build, start,
-check, and explain this Inception project from scratch.
+このドキュメントは、開発者が Inception project をゼロから setup し、build、起動、
+確認、レビュー説明を行うための技術メモです。
 
-## Project Layout
+## Project 構成
 
 ```text
 .
@@ -34,25 +34,25 @@ check, and explain this Inception project from scratch.
             `-- tools/entrypoint.sh
 ```
 
-Each service has its own Dockerfile, configuration files, and startup script.
-The full stack is defined in `srcs/docker-compose.yml`.
+service ごとに Dockerfile、設定ファイル、起動 script を分けています。全体構成は
+`srcs/docker-compose.yml` にあります。
 
-## Environment Setup From Scratch
+## ゼロからの環境 setup
 
-Run project commands from the repository root.
+project command は repository root で実行します。
 
 ```sh
 cd <your_repozitory>
 ```
 
-Requirements:
+必要なもの:
 
 - Docker Engine
 - Docker Compose plugin
 - GNU Make
-- `curl` and `openssl` for smoke tests
+- smoke test 用の `curl` と `openssl`
 
-Check versions:
+version 確認:
 
 ```sh
 docker --version
@@ -60,26 +60,25 @@ docker compose version
 make --version
 ```
 
-### 1. Create Host Directories for Persistence
+### 1. 永続化用 host directory を作る
 
-Compose volumes use the local driver with bind options. Host directories are
-required before startup.
+Compose volume は local driver の bind option を使います。起動前に host directory が必要です。
 
 ```sh
 mkdir -p /home/tvaroux/data/mariadb
 mkdir -p /home/tvaroux/data/wordpress
 ```
 
-MariaDB files remain in `/home/tvaroux/data/mariadb`.
-WordPress files remain in `/home/tvaroux/data/wordpress`.
+MariaDB files は `/home/tvaroux/data/mariadb` に残ります。
+WordPress files は `/home/tvaroux/data/wordpress` に残ります。
 
-### 2. Create `srcs/.env`
+### 2. `srcs/.env` を作る
 
 ```sh
 cp srcs/.env_sample srcs/.env
 ```
 
-Sample:
+sample:
 
 ```env
 DOMAIN_NAME=tvaroux.42.fr
@@ -94,15 +93,13 @@ WP_USER=wpeditor
 WP_USER_EMAIL=editor@example.com
 ```
 
-Only non-secret configuration belongs in `.env`. Do not put passwords in
-`.env`.
+`.env` には secret ではない設定だけを書きます。password は `.env` に置きません。
 
-Important review point: the WordPress administrator username must not contain
-`admin` or `Admin`.
+レビューでの重要点: WordPress administrator username には `admin` や `Admin` を含めません。
 
-### 3. Create Docker Secrets
+### 3. Docker secrets を作る
 
-Compose expects three secret files.
+Compose は 3 つの secret file を期待します。
 
 ```sh
 mkdir -p secrets
@@ -111,7 +108,7 @@ echo -n pw > secrets/wp_admin_password.txt
 echo -n pw > secrets/wp_editor_password.txt
 ```
 
-Secret mapping:
+secret の対応:
 
 | Compose secret | Host file | Runtime path |
 | --- | --- | --- |
@@ -119,62 +116,60 @@ Secret mapping:
 | `wp_admin_password` | `../secrets/wp_admin_password.txt` | `/run/secrets/wp_admin_password` |
 | `wp_editor_password` | `../secrets/wp_editor_password.txt` | `/run/secrets/wp_editor_password` |
 
-Entrypoint scripts read passwords as files. Because passwords are not placed in
-normal environment variables, they are less likely to appear in `docker inspect`
-or process environments.
+entrypoint script は password を file として読みます。通常の environment variable に password を置かないため、
+`docker inspect` や process environment に出にくい構成です。
 
-### 4. Domain Setup
+### 4. domain setup
 
-If the domain does not resolve, add it to `/etc/hosts` on the VM or evaluation
-host.
+domain が解決できない場合は、VM または評価 host の `/etc/hosts` に追加します。
 
 ```text
 127.0.0.1 tvaroux.42.fr
 ```
 
-## Build and Start
+## Build と起動
 
-Main Makefile targets:
+主な Makefile target:
 
-| Target | Purpose |
+| Target | 目的 |
 | --- | --- |
-| `make` / `make all` / `make up` | Build images and start containers detached |
-| `make build` | Build images only |
-| `make up-no-build` | Start existing images without building |
-| `make down` | Stop and remove containers |
-| `make down-v` | Remove containers and Compose volumes |
-| `make re` | Run `make down`, then `make up` |
-| `make curl-https` | HTTPS test with `curl --insecure --verbose` |
-| `make inspect-nginx` | Inspect the NGINX container |
-| `make inspect-wordpress` | Inspect the WordPress container |
-| `make inspect-mariadb` | Inspect the MariaDB container |
+| `make` / `make all` / `make up` | image を build し、container を detached 起動 |
+| `make build` | image だけ build |
+| `make up-no-build` | build せず、既存 image で起動 |
+| `make down` | container を停止・削除 |
+| `make down-v` | container と Compose volume を削除 |
+| `make re` | `make down` のあと `make up` |
+| `make curl-https` | `curl --insecure --verbose` で HTTPS test |
+| `make inspect-nginx` | NGINX container を inspect |
+| `make inspect-wordpress` | WordPress container を inspect |
+| `make inspect-mariadb` | MariaDB container を inspect |
 
-First build:
+初回 build:
 
 ```sh
 make up
 ```
 
-Equivalent Compose command:
+同等の Compose command:
 
 ```sh
 docker compose -f ./srcs/docker-compose.yml up --detach --build
 ```
 
-Build only:
+build のみ:
 
 ```sh
 make build
 ```
 
-Recreate containers:
+container を作り直す:
 
 ```sh
 make down
 make up-no-build
 ```
 
-After changing a Dockerfile or a configuration file copied into an image:
+Dockerfile や image に copy される設定ファイルを変更した後:
 
 ```sh
 make down
@@ -182,7 +177,7 @@ make build
 make up-no-build
 ```
 
-Clean start:
+clean start:
 
 ```sh
 make down-v
@@ -191,9 +186,9 @@ mkdir -p /home/tvaroux/data/mariadb /home/tvaroux/data/wordpress
 make up
 ```
 
-## Container and Volume Management Commands
+## Container と volume 管理 command
 
-Status:
+status:
 
 ```sh
 docker compose -f srcs/docker-compose.yml ps
@@ -202,7 +197,7 @@ docker network ls
 docker volume ls
 ```
 
-Inspect:
+inspect:
 
 ```sh
 make inspect-nginx
@@ -210,7 +205,7 @@ make inspect-wordpress
 make inspect-mariadb
 ```
 
-Shell:
+shell:
 
 ```sh
 docker exec --interactive --tty nginx sh
@@ -218,17 +213,16 @@ docker exec --interactive --tty wordpress sh
 docker exec --interactive --tty mariadb sh
 ```
 
-Volume inspection:
+volume inspection:
 
 ```sh
 docker volume inspect srcs_mariadb_data
 docker volume inspect srcs_wordpress_data
 ```
 
-Expected host devices:
+期待する host device:
 
 ```text
 /home/tvaroux/data/mariadb
 /home/tvaroux/data/wordpress
 ```
-
